@@ -43,7 +43,7 @@ Three.js remains the rendering and scene foundation. Physics, triggers, cutscene
 
 ## Deployment
 
-The browser build is static and can be deployed to GitHub Pages by the included GitHub Actions workflow. Vite uses `/3ditorJS/` as its Pages base path in Actions builds. Tauri uses the same `dist` output for native desktop packaging and will eventually provide the native filesystem adapter.
+The browser build is static and deploys through GitHub Actions. Tauri uses the same `dist` output for native desktop packaging and will eventually provide the native filesystem adapter. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Pages setup, the desktop release workflow, and troubleshooting.
 
 ```bash
 npm run build
@@ -52,8 +52,6 @@ npm run tauri:build
 ```
 
 The Tauri commands require the Rust toolchain and platform build prerequisites. Windows artifacts can be built on Windows; Linux AppImage artifacts should be built on Linux or in a Linux GitHub Actions runner.
-
-GitHub Pages must be configured to use **GitHub Actions** as its deployment source. The Pages workflow deploys the `dist` artifact from `main` and uses the repository base path `/3ditorJS/`.
 
 ## Scene authoring contract
 

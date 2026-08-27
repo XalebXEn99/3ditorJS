@@ -33,7 +33,7 @@ The Scripts section can create, edit, and save JavaScript files. Select an objec
 
 ## Menus
 
-Menus are optional. Open `/menu-editor.html` to edit code-first `menu.js` and `menu.css`. Register a menu with `UIManager` only when a game needs HTML/CSS UI. Scenes without menus are unaffected.
+Menus are optional. Open `./menu-editor.html` from the editor to edit code-first `menu.js` and `menu.css`. Register a menu with `UIManager` only when a game needs HTML/CSS UI. Scenes without menus are unaffected.
 
 ## Source of truth
 
@@ -45,4 +45,4 @@ Scene JSON is the structured bridge used by the visual editor and persistence. `
 
 ## Release targets
 
-GitHub Pages serves the Vite browser build. Tauri uses the same `dist` output for desktop builds. The shared editor code must not call Tauri APIs directly; platform-specific behavior belongs behind storage adapters.
+GitHub Pages serves the Vite browser build. Tauri uses the same `dist` output for desktop builds. The shared editor code must not call Tauri APIs directly; platform-specific behavior belongs behind storage adapters. Deployment setup and release procedures are in [DEPLOYMENT.md](DEPLOYMENT.md).
