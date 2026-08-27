@@ -43,7 +43,7 @@ Scene JSON is the structured bridge used by the visual editor and persistence. `
 
 `Save` stores the virtual explorer files and active scene JSON in IndexedDB. `Load` restores them through the normal scene-apply path. The project manager can create or open a specific browser project; the selected project is carried into the editor by its project URL. The browser storage adapter is separate from the future File System Access and Tauri adapters.
 
-The Project panel groups a conventional Three.js game workspace into Project files (`main.js`), Scenes, Scripts, Shaders, Assets (models and textures), Audio (BGM and SFX), Animations, and Menus. Audio folders organize future sound assets; scene BGM and positional SFX playback are not implemented yet.
+The Project panel groups a conventional Three.js game workspace into Project files (`main.js`), Scenes, Scripts, Shaders, Assets (models and textures), Audio (BGM and SFX), Animations, and Menus. Folder-local actions create scenes, scripts, shader source pairs, and menus. Asset and audio actions open the browser file chooser and store selected files in the active browser project. Click a code file to use the full right-panel Monaco workspace; click the return arrow to resume scene inspection. Files can be deleted from the Project panel. Audio folders organize imported sound files; scene BGM and positional SFX playback are not implemented yet.
 
 ## Release targets
 

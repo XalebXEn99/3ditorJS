@@ -72,6 +72,16 @@ const MENU_TEMPLATE = `export function createMenu(root, actions) {
 }
 `;
 
+function inferFileType(path) {
+  if (path.endsWith('.scene.js') || path.endsWith('.scene.json')) return 'scene';
+  if (path.endsWith('.vert') || path.endsWith('.frag')) return 'shader';
+  if (path.startsWith('audio/')) return 'audio';
+  if (path.startsWith('assets/')) return 'asset';
+  if (path.endsWith('.menu.js')) return 'menu';
+  if (path.endsWith('.md') || path.endsWith('.json')) return 'document';
+  return 'javascript';
+}
+
 export class ProjectManager {
   constructor({ onChange, onOpen } = {}) {
     this.files = new Map(DEFAULT_FILES.map((file) => [file.path, { ...file }]));
@@ -125,6 +135,33 @@ export class ProjectManager {
     return { vertexPath, fragmentPath };
   }
 
+  addImportedFiles(folder, files) {
+    const added = [];
+    for (const source of files) {
+      const path = `${folder}/${source.name}`;
+      const file = {
+        path,
+        type: folder === 'audio' ? 'audio' : 'asset',
+        content: source,
+        mimeType: source.type,
+        size: source.size,
+      };
+      this.files.set(path, file);
+      added.push(file);
+    }
+    this.onChange?.(this.listFiles());
+    return added;
+  }
+
+  async deleteProjectFile(path) {
+    const file = this.files.get(path);
+    if (!file) return false;
+    this.files.delete(path);
+    if (this.storage && this.projectId) await this.storage.deleteFile(this.projectId, path);
+    this.onChange?.(this.listFiles());
+    return true;
+  }
+
   open(file) {
     this.onOpen?.(file);
   }
@@ -138,7 +175,7 @@ export class ProjectManager {
     this.projectId = project.id;
     for (const [path, content] of Object.entries(project.files || {})) {
       const existing = this.files.get(path);
-      this.files.set(path, { ...(existing || { path, type: path.endsWith('.scene.js') ? 'scene' : 'javascript' }), content });
+      this.files.set(path, { ...(existing || { path, type: inferFileType(path) }), content });
     }
     return project;
   }

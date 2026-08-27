@@ -126,22 +126,38 @@ function renderProjectTree() {
     folders.get(folder).push({ ...file, name });
   }
   const folderOrder = ['project', 'scenes', 'scripts', 'shaders', 'assets', 'audio', 'animations', 'menus'];
-  for (const folder of folderOrder.filter((name) => folders.has(name))) {
-    const files = folders.get(folder);
+  for (const folder of folderOrder) {
+    const files = folders.get(folder) || [];
     const folderLabel = document.createElement('p');
     folderLabel.className = 'project-folder';
     folderLabel.textContent = restName(folder);
     projectTree.append(folderLabel);
     files.forEach((file) => {
+      const row = document.createElement('div');
+      row.className = 'project-file-row';
       const button = document.createElement('button');
       button.className = 'project-file';
       button.type = 'button';
       button.textContent = file.name;
       button.title = file.path;
       button.addEventListener('click', () => projectManager.open(file));
-      projectTree.append(button);
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'project-file-delete';
+      deleteButton.textContent = '×';
+      deleteButton.setAttribute('aria-label', `Delete ${file.path}`);
+      deleteButton.title = `Delete ${file.path}`;
+      deleteButton.addEventListener('click', () => deleteProjectFile(file));
+      row.append(button, deleteButton);
+      projectTree.append(row);
     });
-    const createLabel = folder === 'scenes' ? 'Add scene' : folder === 'scripts' ? 'Add script' : folder === 'menus' ? 'Add menu' : null;
+    const createLabel = folder === 'scenes' ? '+ New scene'
+      : folder === 'scripts' ? '+ New script'
+        : folder === 'shaders' ? '+ New shader'
+          : folder === 'assets' ? '+ Import asset'
+            : folder === 'audio' ? '+ Import audio'
+              : folder === 'menus' ? '+ New menu'
+                : null;
     if (createLabel) {
       const createButton = document.createElement('button');
       createButton.type = 'button';
@@ -168,13 +184,51 @@ function restName(value) {
 }
 
 function createProjectFile(folder) {
-  const typeByFolder = { scenes: 'scene', scripts: 'javascript', menus: 'menu' };
-  const prefixByFolder = { scenes: 'scene', scripts: 'script', menus: 'menu' };
+  if (folder === 'assets' || folder === 'audio') {
+    importProjectFiles(folder);
+    return;
+  }
+  const typeByFolder = { scenes: 'scene', scripts: 'javascript', shaders: 'shader', menus: 'menu' };
+  const prefixByFolder = { scenes: 'scene', scripts: 'script', shaders: 'shader', menus: 'menu' };
   const name = `${prefixByFolder[folder]}-${projectManager.listFiles().filter((file) => file.type === typeByFolder[folder]).length + 1}`;
   try {
     if (folder === 'scenes') projectManager.createScene(name);
     if (folder === 'scripts') projectManager.createScript(name);
+    if (folder === 'shaders') {
+      const { vertexPath } = projectManager.createShaderFiles(name);
+      projectManager.open(projectManager.files.get(vertexPath));
+    }
     if (folder === 'menus') projectManager.createMenu(name);
+  } catch (error) {
+    projectStatus.textContent = error.message;
+  }
+}
+
+function importProjectFiles(folder) {
+  const picker = document.createElement('input');
+  picker.type = 'file';
+  picker.multiple = true;
+  picker.accept = folder === 'audio' ? 'audio/*' : '.gltf,.glb,image/*';
+  picker.addEventListener('change', async () => {
+    const added = projectManager.addImportedFiles(folder, picker.files);
+    try {
+      for (const file of added) {
+        if (projectManager.storage && projectManager.projectId) await projectManager.saveProjectFile(file.path, file.content);
+      }
+      projectStatus.textContent = added.length ? `Imported ${added.length} ${folder === 'audio' ? 'audio file' : 'asset'}${added.length === 1 ? '' : 's'}` : 'No files selected';
+    } catch (error) {
+      projectStatus.textContent = error.message;
+    }
+  }, { once: true });
+  picker.click();
+}
+
+async function deleteProjectFile(file) {
+  try {
+    const deleted = await projectManager.deleteProjectFile(file.path);
+    if (!deleted) return;
+    if (activeProjectFile?.path === file.path) showSceneWorkspace();
+    projectStatus.textContent = `Deleted ${file.path}`;
   } catch (error) {
     projectStatus.textContent = error.message;
   }

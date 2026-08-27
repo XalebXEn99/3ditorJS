@@ -122,7 +122,7 @@ The editor supports built-in Three.js materials including Basic, Phong, Standard
 
 ### Projects, scripts, and menus
 
-`ProjectManager` provides an in-memory virtual file registry with project files, scenes, scripts, shaders, assets (models and textures), audio (BGM and SFX), animations, and menus. Its browser persistence adapter stores projects and files in IndexedDB. `ScriptManager` tracks object-to-script attachments; scripts are generated as imports and instances but are not a general script execution sandbox.
+`ProjectManager` provides an in-memory virtual file registry with project files, scenes, scripts, shaders, assets (models and textures), audio (BGM and SFX), animations, and menus. Folder-local creation actions add source files, while browser file pickers import local asset and audio files into the active IndexedDB project. Its browser persistence adapter stores projects and files in IndexedDB. `ScriptManager` tracks object-to-script attachments; scripts are generated as imports and instances but are not a general script execution sandbox.
 
 `UIManager` powers optional game menus. The menu editor is separate so scene editing does not require a menu. A scene without a registered menu is unaffected.
 
