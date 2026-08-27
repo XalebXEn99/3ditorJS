@@ -43,6 +43,8 @@ Scene JSON is the structured bridge used by the visual editor and persistence. `
 
 `Save` stores the virtual explorer files and active scene JSON in IndexedDB. `Load` restores them through the normal scene-apply path. The project manager can create or open a specific browser project; the selected project is carried into the editor by its project URL. The browser storage adapter is separate from the future File System Access and Tauri adapters.
 
+The Project panel groups a conventional Three.js game workspace into Project files (`main.js`), Scenes, Scripts, Shaders, Assets (models and textures), Audio (BGM and SFX), Animations, and Menus. Audio folders organize future sound assets; scene BGM and positional SFX playback are not implemented yet.
+
 ## Release targets
 
 GitHub Pages serves the Vite browser build. Tauri uses the same `dist` output for desktop builds. The shared editor code must not call Tauri APIs directly; platform-specific behavior belongs behind storage adapters. Deployment setup and release procedures are in [DEPLOYMENT.md](DEPLOYMENT.md).

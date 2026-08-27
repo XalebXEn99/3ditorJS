@@ -55,8 +55,6 @@ const editorViews = document.querySelectorAll('[data-editor-view]');
 const panel = document.querySelector('.editor-panel');
 const panelResizeHandle = document.querySelector('#panel-resize-handle');
 const projectTree = document.querySelector('#project-tree');
-const projectAdd = document.querySelector('#project-add');
-const projectCreateMenu = document.querySelector('#project-create-menu');
 const projectStatus = document.querySelector('#project-status');
 const projectSave = document.querySelector('#project-save');
 const projectLoad = document.querySelector('#project-load');
@@ -78,6 +76,12 @@ const saveScriptButton = document.querySelector('#save-script');
 const scriptSelect = document.querySelector('#script-select');
 const scriptEditorView = document.querySelector('#script-editor-view');
 const scriptEditorHost = document.querySelector('#script-editor-host');
+const fileWorkspace = document.querySelector('#file-workspace');
+const fileWorkspaceTitle = document.querySelector('#file-workspace-title');
+const fileEditorHost = document.querySelector('#file-editor-host');
+const fileDetailView = document.querySelector('#file-detail-view');
+const saveFileWorkspace = document.querySelector('#save-file-workspace');
+const returnToScene = document.querySelector('#return-to-scene');
 const sceneDeleteObject = document.querySelector('#scene-delete-object');
 const sceneDuplicateObject = document.querySelector('#scene-duplicate-object');
 const scene = new THREE.Scene();
@@ -92,7 +96,14 @@ const projectManager = new ProjectManager({
   onChange: renderProjectTree,
   onOpen: (file) => {
     projectStatus.textContent = `Opened ${file.path}`;
-    if (file.type === 'scene' && file.sceneJSON) sceneManager.switchTo(file.sceneId);
+    if (file.type === 'scene') {
+      showSceneWorkspace();
+      if (file.sceneJSON) sceneManager.switchTo(file.sceneId);
+    } else if (file.type === 'menu') {
+      window.location.href = `./menu-editor.html?project=${encodeURIComponent(projectManager.projectId || '')}&menu=${encodeURIComponent(file.path)}`;
+    } else {
+      showFileWorkspace(file);
+    }
   },
 });
 const projectStorage = new IndexedDbProjectStorage();
@@ -101,18 +112,22 @@ const scriptManager = new ScriptManager(projectManager);
 let playMode = false;
 let playTarget = null;
 let scriptEditor = null;
+let fileEditor = null;
+let activeProjectFile = null;
 
 function renderProjectTree() {
   projectTree.replaceChildren();
   const folders = new Map();
   for (const file of projectManager.listFiles()) {
-    const [folder, ...rest] = file.path.split('/');
-    const name = rest.length ? rest.join('/') : folder;
+    const parts = file.path.split('/');
+    const folder = parts.length > 1 ? parts[0] : 'project';
+    const name = parts.length > 1 ? parts.slice(1).join('/') : file.path;
     if (!folders.has(folder)) folders.set(folder, []);
-    if (rest.length) folders.get(folder).push({ ...file, name });
-    else folders.get(folder).push({ ...file, name: folder });
+    folders.get(folder).push({ ...file, name });
   }
-  for (const [folder, files] of folders) {
+  const folderOrder = ['project', 'scenes', 'scripts', 'shaders', 'assets', 'audio', 'animations', 'menus'];
+  for (const folder of folderOrder.filter((name) => folders.has(name))) {
+    const files = folders.get(folder);
     const folderLabel = document.createElement('p');
     folderLabel.className = 'project-folder';
     folderLabel.textContent = restName(folder);
@@ -126,30 +141,44 @@ function renderProjectTree() {
       button.addEventListener('click', () => projectManager.open(file));
       projectTree.append(button);
     });
+    const createLabel = folder === 'scenes' ? 'Add scene' : folder === 'scripts' ? 'Add script' : folder === 'menus' ? 'Add menu' : null;
+    if (createLabel) {
+      const createButton = document.createElement('button');
+      createButton.type = 'button';
+      createButton.className = 'project-folder-action';
+      createButton.textContent = createLabel;
+      createButton.addEventListener('click', () => createProjectFile(folder));
+      projectTree.append(createButton);
+    }
   }
 }
 
-function restName(value) { return value === 'scenes' ? 'Scenes' : value === 'scripts' ? 'Scripts' : value.charAt(0).toUpperCase() + value.slice(1); }
+function restName(value) {
+  const labels = {
+    project: 'Project files',
+    scenes: 'Scenes',
+    scripts: 'Scripts',
+    shaders: 'Shaders',
+    assets: 'Assets',
+    audio: 'Audio',
+    animations: 'Animations',
+    menus: 'Menus',
+  };
+  return labels[value] || value.charAt(0).toUpperCase() + value.slice(1);
+}
 
-projectAdd.addEventListener('click', () => {
-  projectCreateMenu.hidden = !projectCreateMenu.hidden;
-});
-document.querySelector('#new-scene-file').addEventListener('click', () => {
+function createProjectFile(folder) {
+  const typeByFolder = { scenes: 'scene', scripts: 'javascript', menus: 'menu' };
+  const prefixByFolder = { scenes: 'scene', scripts: 'script', menus: 'menu' };
+  const name = `${prefixByFolder[folder]}-${projectManager.listFiles().filter((file) => file.type === typeByFolder[folder]).length + 1}`;
   try {
-    projectManager.createScene(`scene-${projectManager.listFiles().filter((file) => file.type === 'scene').length}`);
-    projectCreateMenu.hidden = true;
+    if (folder === 'scenes') projectManager.createScene(name);
+    if (folder === 'scripts') projectManager.createScript(name);
+    if (folder === 'menus') projectManager.createMenu(name);
   } catch (error) {
     projectStatus.textContent = error.message;
   }
-});
-document.querySelector('#new-script-file').addEventListener('click', () => {
-  try {
-    projectManager.createScript(`script-${projectManager.listFiles().filter((file) => file.type === 'javascript').length}`);
-    projectCreateMenu.hidden = true;
-  } catch (error) {
-    projectStatus.textContent = error.message;
-  }
-});
+}
 renderProjectTree();
 
 const camera = new THREE.PerspectiveCamera(
@@ -475,7 +504,51 @@ scriptEditor = monaco.editor.create(scriptEditorHost, {
   language: 'javascript',
   value: '',
 });
+fileEditor = monaco.editor.create(fileEditorHost, {
+  ...editorOptions,
+  language: 'javascript',
+  value: '',
+});
 addFullscreenControl(scriptEditorHost, 'script');
+addFullscreenControl(fileEditorHost, 'project file');
+
+function showSceneWorkspace() {
+  activeProjectFile = null;
+  fileWorkspace.hidden = true;
+  panel.classList.remove('is-file-workspace');
+  requestAnimationFrame(() => monaco.editor.getEditors().forEach((editor) => editor.layout()));
+}
+
+function showFileWorkspace(file) {
+  activeProjectFile = file;
+  fileWorkspaceTitle.textContent = file.path;
+  fileWorkspace.hidden = false;
+  panel.classList.add('is-file-workspace');
+  const isCodeFile = file.type === 'javascript' || file.type === 'shader' || file.type === 'document';
+  fileEditorHost.hidden = !isCodeFile;
+  fileDetailView.hidden = isCodeFile;
+  saveFileWorkspace.hidden = !isCodeFile;
+  if (isCodeFile) {
+    fileEditor.setModelLanguage(fileEditor.getModel(), file.type === 'shader' ? 'cpp' : file.path.endsWith('.md') ? 'markdown' : 'javascript');
+    fileEditor.setValue(file.content || '');
+    requestAnimationFrame(() => fileEditor.layout());
+    return;
+  }
+  const category = file.type === 'audio' ? 'Audio asset' : 'Asset';
+  fileDetailView.textContent = `${category}: ${file.path}. Imported media metadata and preview controls will appear here. Source asset files are preserved as project files and are not opened as editable JavaScript.`;
+}
+
+returnToScene.addEventListener('click', showSceneWorkspace);
+saveFileWorkspace.addEventListener('click', async () => {
+  if (!activeProjectFile) return;
+  activeProjectFile.content = fileEditor.getValue();
+  try {
+    if (projectManager.storage && projectManager.projectId) await projectManager.saveProjectFile(activeProjectFile.path, activeProjectFile.content);
+    projectStatus.textContent = `Saved ${activeProjectFile.path}`;
+  } catch (error) {
+    projectStatus.textContent = error.message;
+  }
+});
 
 function populateScripts() {
   const current = scriptSelect.value;

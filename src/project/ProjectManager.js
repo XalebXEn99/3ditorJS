@@ -48,7 +48,10 @@ const DEFAULT_FILES = [
 ` },
   { path: 'animations/README.md', type: 'document' },
   { path: 'menus/README.md', type: 'document' },
-  { path: 'assets/.gitkeep', type: 'asset' },
+  { path: 'assets/models/.gitkeep', type: 'asset' },
+  { path: 'assets/textures/.gitkeep', type: 'asset' },
+  { path: 'audio/bgm/.gitkeep', type: 'audio' },
+  { path: 'audio/sfx/.gitkeep', type: 'audio' },
   { path: 'shaders/README.md', type: 'document' },
 ];
 
@@ -61,6 +64,11 @@ export function createScene() {
   scene.add(camera);
 
   return { scene, camera };
+}
+`;
+
+const MENU_TEMPLATE = `export function createMenu(root, actions) {
+  root.innerHTML = '<section class="menu"><h1>New menu</h1></section>';
 }
 `;
 
@@ -91,6 +99,16 @@ export class ProjectManager {
     const path = `scripts/${name.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase()}.js`;
     if (this.files.has(path)) throw new Error(`File already exists: ${path}`);
     const file = { path, type: 'javascript', content: '' };
+    this.files.set(path, file);
+    this.onChange?.(this.listFiles());
+    this.open(file);
+    return file;
+  }
+
+  createMenu(name = 'new-menu') {
+    const path = `menus/${name.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase()}.menu.js`;
+    if (this.files.has(path)) throw new Error(`File already exists: ${path}`);
+    const file = { path, type: 'menu', content: MENU_TEMPLATE };
     this.files.set(path, file);
     this.onChange?.(this.listFiles());
     this.open(file);

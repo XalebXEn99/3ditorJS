@@ -122,7 +122,7 @@ The editor supports built-in Three.js materials including Basic, Phong, Standard
 
 ### Projects, scripts, and menus
 
-`ProjectManager` provides an in-memory virtual file registry with starter scene, script, shader, asset, animation, and menu locations. Its browser persistence adapter stores projects and files in IndexedDB. `ScriptManager` tracks object-to-script attachments; scripts are generated as imports and instances but are not a general script execution sandbox.
+`ProjectManager` provides an in-memory virtual file registry with project files, scenes, scripts, shaders, assets (models and textures), audio (BGM and SFX), animations, and menus. Its browser persistence adapter stores projects and files in IndexedDB. `ScriptManager` tracks object-to-script attachments; scripts are generated as imports and instances but are not a general script execution sandbox.
 
 `UIManager` powers optional game menus. The menu editor is separate so scene editing does not require a menu. A scene without a registered menu is unaffected.
 
@@ -192,6 +192,7 @@ sequenceDiagram
 - IndexedDB is the working project persistence backend. The project manager opens a selected browser project by passing its project ID to the editor URL.
 - File System Access and Tauri filesystem adapters are planned behind `ProjectStorage`.
 - Player scripts are scaffolded and attachable; general user-script lifecycle execution remains incomplete.
+- Audio folders are available in the project explorer, but scene BGM, positional SFX objects, attenuation controls, and audio-asset playback remain to be implemented.
 - Shader files, uniform controls, persistence, and preview diagnostics need further strengthening.
 - The inspector supports the active editor schema but does not yet match full Three.js Editor parity.
 - Collision impact visualization and a broad automated test suite are planned.

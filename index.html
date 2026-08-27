@@ -47,16 +47,11 @@
           <p class="panel-kicker">Project</p>
           <div class="project-header-actions">
             <a class="project-manager-link" href="./project-manager.html" aria-label="Open project manager" title="Open project manager">⌂</a>
-            <button id="project-add" class="project-add" type="button" aria-label="Create project file" title="Create project file">+</button>
-            <button id="project-save" class="project-file-action" type="button" aria-label="Save project" title="Save project"><span aria-hidden="true">⇩</span> Save</button>
-            <button id="project-load" class="project-file-action" type="button" aria-label="Load project" title="Load project"><span aria-hidden="true">⇧</span> Load</button>
+            <button id="project-save" class="project-file-action" type="button" aria-label="Save project" title="Save project"><span aria-hidden="true">⇩</span></button>
+            <button id="project-load" class="project-file-action" type="button" aria-label="Load project" title="Load project"><span aria-hidden="true">⇧</span></button>
           </div>
         </div>
         <div id="project-tree" class="project-tree"></div>
-        <div id="project-create-menu" class="project-create-menu" hidden>
-          <button id="new-scene-file" type="button">New scene.js</button>
-          <button id="new-script-file" type="button">New script.js</button>
-        </div>
         <p id="project-status" class="project-status" role="status"></p>
       </aside>
       <aside class="editor-panel" aria-label="Scene inspector">
@@ -64,6 +59,18 @@
           <span aria-hidden="true"></span>
         </button>
         <button id="panel-collapse" class="panel-collapse inspector-collapse" type="button" aria-label="Collapse inspector" title="Collapse inspector">›</button>
+        <section id="file-workspace" class="file-workspace" hidden aria-label="Project file workspace">
+          <div class="file-workspace-header">
+            <div>
+              <p class="panel-kicker">Project file</p>
+              <h2 id="file-workspace-title">File</h2>
+            </div>
+            <button id="return-to-scene" class="file-workspace-return" type="button" aria-label="Return to scene inspector" title="Return to scene inspector">←</button>
+          </div>
+          <div id="file-editor-host" class="monaco-editor-host file-editor-host" aria-label="Project file editor"></div>
+          <div id="file-detail-view" class="file-detail-view" hidden></div>
+          <button id="save-file-workspace" class="apply-button" type="button">Save file</button>
+        </section>
         <section class="panel-section">
           <div class="scene-tree-header">
             <p class="panel-kicker">Scene Tree</p>
