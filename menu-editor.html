@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3ditor JS / Menu Editor</title>
+  </head>
+  <body>
+    <main id="menu-editor-app">
+      <header class="menu-editor-header">
+        <div>
+          <p class="menu-editor-kicker">3ditor JS</p>
+          <h1>Menu editor</h1>
+        </div>
+        <a href="/">Back to scene editor</a>
+      </header>
+      <section class="menu-editor-layout">
+        <div class="menu-canvas-wrap">
+          <p class="menu-editor-kicker">Preview</p>
+          <div id="menu-canvas" class="menu-canvas"></div>
+        </div>
+        <div class="menu-data-wrap">
+          <div class="menu-tabs">
+            <button id="menu-js-tab" class="menu-tab is-active" type="button">menu.js</button>
+            <button id="menu-css-tab" class="menu-tab" type="button">menu.css</button>
+          </div>
+          <div id="menu-js-view" class="menu-code-view is-active">
+            <div id="menu-js" class="menu-editor-host" aria-label="Menu JavaScript editor"></div>
+            <div class="menu-editor-actions">
+              <button id="add-menu-button" type="button">Add button template</button>
+              <button id="add-menu-heading" type="button">Add heading template</button>
+              <button id="apply-menu-js" type="button">Apply menu.js</button>
+              <button id="export-menu-files" type="button">Export files</button>
+              <label class="import-menu-files">Import file <input id="import-menu-file" type="file" accept=".js,.css" multiple></label>
+            </div>
+          </div>
+          <div id="menu-css-view" class="menu-code-view" hidden>
+            <div id="menu-css" class="menu-editor-host" aria-label="Menu CSS editor"></div>
+            <button id="apply-menu-css" type="button">Apply menu.css</button>
+          </div>
+          <div class="menu-style-tools" aria-label="Selected menu element style">
+            <p class="menu-editor-kicker">Selected element</p>
+            <span id="selected-menu-element">Click an element in the preview</span>
+            <label>Left <input id="element-left" type="number" min="0" step="1" value="0"></label>
+            <label>Top <input id="element-top" type="number" min="0" step="1" value="0"></label>
+            <button id="apply-element-position" type="button">Apply position to menu.js</button>
+          </div>
+          <p id="menu-status" role="status"></p>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/menuEditor.js"></script>
+  </body>
+</html>

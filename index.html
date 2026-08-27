@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101820" />
+    <title>3ditor JS</title>
+  </head>
+  <body>
+    <main id="app" aria-label="3ditor JS scene editor">
+      <div class="scene-status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>Scene editor</span>
+      </div>
+      <div id="scene-container"></div>
+      <div id="scene-transition" class="scene-transition" aria-hidden="true"></div>
+      <div id="object-modal" class="object-modal" hidden>
+        <div class="object-modal-card" role="dialog" aria-modal="true" aria-labelledby="object-modal-title">
+          <div class="object-modal-header">
+            <div>
+              <p class="panel-kicker">Scene Tree</p>
+              <h2 id="object-modal-title">Add object</h2>
+            </div>
+            <button id="object-modal-close" class="modal-close" type="button" aria-label="Close add object dialog" title="Close">×</button>
+          </div>
+          <div class="object-palette">
+            <button type="button" data-add-type="box">Box</button>
+            <button type="button" data-add-type="sphere">Sphere</button>
+            <button type="button" data-add-type="cylinder">Cylinder</button>
+            <button type="button" data-add-type="cone">Cone</button>
+            <button type="button" data-add-type="torus">Torus</button>
+            <button type="button" data-add-type="directional-light">Directional light</button>
+            <button type="button" data-add-type="point-light">Point light</button>
+            <button type="button" data-add-type="camera">Perspective camera</button>
+            <button type="button" data-add-type="cutscene">Cutscene + spline</button>
+            <label class="import-object-button">Import GLTF / GLB<input id="import-object-file" type="file" accept=".gltf,.glb"></label>
+          </div>
+          <p id="object-modal-status" class="modal-status" role="status"></p>
+        </div>
+      </div>
+      <aside class="project-panel" aria-label="Project explorer">
+        <button id="project-collapse" class="panel-collapse" type="button" aria-label="Collapse project explorer" title="Collapse project explorer">‹</button>
+        <button id="project-resize-handle" class="project-resize-handle" type="button" aria-label="Resize project explorer" title="Resize project explorer">
+          <span aria-hidden="true"></span>
+        </button>
+        <div class="project-header">
+          <p class="panel-kicker">Project</p>
+          <div class="project-header-actions">
+            <button id="project-add" class="project-add" type="button" aria-label="Create project file" title="Create project file">+</button>
+            <button id="project-save" class="project-file-action" type="button" aria-label="Save project" title="Save project"><span aria-hidden="true">⇩</span> Save</button>
+            <button id="project-load" class="project-file-action" type="button" aria-label="Load project" title="Load project"><span aria-hidden="true">⇧</span> Load</button>
+          </div>
+        </div>
+        <div id="project-tree" class="project-tree"></div>
+        <div id="project-create-menu" class="project-create-menu" hidden>
+          <button id="new-scene-file" type="button">New scene.js</button>
+          <button id="new-script-file" type="button">New script.js</button>
+        </div>
+        <p id="project-status" class="project-status" role="status"></p>
+      </aside>
+      <aside class="editor-panel" aria-label="Scene inspector">
+        <button id="panel-resize-handle" class="panel-resize-handle" type="button" aria-label="Resize inspector panel" title="Resize inspector panel">
+          <span aria-hidden="true"></span>
+        </button>
+        <button id="panel-collapse" class="panel-collapse inspector-collapse" type="button" aria-label="Collapse inspector" title="Collapse inspector">›</button>
+        <section class="panel-section">
+          <div class="scene-tree-header">
+            <p class="panel-kicker">Scene Tree</p>
+            <div class="scene-tree-actions">
+              <button id="play-scene" class="scene-tree-icon-button play-scene-button" type="button" aria-label="Play scene" title="Play scene">▶</button>
+              <button id="scene-add-object" class="scene-tree-icon-button" type="button" aria-label="Add object to scene" title="Add object to scene">+</button>
+              <button id="scene-duplicate-object" class="scene-tree-icon-button scene-duplicate-object" type="button" aria-label="Duplicate selected scene item" title="Duplicate selected scene item" disabled>+</button>
+              <button id="scene-delete-object" class="scene-delete-object" type="button" aria-label="Delete selected scene item" title="Delete selected scene item" disabled>−</button>
+            </div>
+          </div>
+          <div id="object-list" class="object-list"></div>
+        </section>
+        <section class="panel-section inspector-section">
+          <p class="panel-kicker">Inspector</p>
+          <p id="selection-label" class="selection-label" contenteditable="true" spellcheck="false">Select an object</p>
+          <div class="history-controls" aria-label="Scene edit history">
+            <button id="undo-scene" class="history-button" type="button">Undo</button>
+            <button id="redo-scene" class="history-button" type="button">Redo</button>
+          </div>
+          <div id="transform-fields" class="transform-fields"></div>
+          <div id="property-fields" class="property-fields"></div>
+          <div id="script-attachment-fields" class="property-fields"></div>
+          <div id="scene-property-fields" class="property-fields"></div>
+          <div id="animation-property-fields" class="property-fields"></div>
+        </section>
+        <section class="panel-section scripts-section">
+          <div class="section-heading-row">
+            <p class="panel-kicker">Scripts</p>
+            <button id="create-script" class="section-action script-add-button" type="button" aria-label="Create new script" title="Create new script">+</button>
+          </div>
+          <select id="script-select" class="cutscene-select" aria-label="Select script"></select>
+          <button id="edit-script" class="cutscene-button" type="button">Edit script</button>
+          <div id="script-editor-view" class="script-editor-view" hidden>
+            <div id="script-editor-host" class="monaco-editor-host" aria-label="Script editor"></div>
+            <button id="save-script" class="apply-button" type="button">Save script</button>
+          </div>
+        </section>
+        <section class="panel-section cutscene-section">
+          <div class="cutscene-controls" aria-label="Cutscene controls">
+            <p class="panel-kicker">Cutscene</p>
+            <select id="cutscene-select" class="cutscene-select" aria-label="Select cutscene"></select>
+            <div class="cutscene-buttons">
+              <button id="cutscene-play" class="cutscene-button" type="button">Play</button>
+              <button id="cutscene-pause" class="cutscene-button" type="button">Pause</button>
+              <button id="cutscene-stop" class="cutscene-button" type="button">Stop</button>
+            </div>
+            <p id="cutscene-status" class="json-status" role="status">Ready</p>
+          </div>
+        </section>
+        <section class="panel-section display-section">
+          <p class="panel-kicker">Display</p>
+          <label class="display-toggle"><input id="physics-toggle" type="checkbox"><span>Physics colliders</span></label>
+          <label class="display-toggle"><input id="trigger-toggle" type="checkbox"><span>Trigger zones</span></label>
+          <label class="display-toggle"><input id="spline-toggle" type="checkbox"><span>Spline editor</span></label>
+          <label class="display-toggle"><input id="camera-helper-toggle" type="checkbox"><span>Camera helper</span></label>
+          <label class="display-toggle"><input id="light-helper-toggle" type="checkbox"><span>Light helpers</span></label>
+        </section>
+        <section class="panel-section editor-section">
+          <div class="editor-tabs" role="tablist" aria-label="Scene data views">
+            <button id="code-tab" class="editor-tab is-active" type="button" role="tab" aria-selected="true">scene.js</button>
+            <button id="json-tab" class="editor-tab" type="button" role="tab" aria-selected="false">Scene JSON</button>
+          </div>
+          <div class="editor-view is-active" data-editor-view="code">
+            <div id="scene-code" class="monaco-editor-host" aria-label="Generated scene JavaScript"></div>
+            <button id="apply-code" class="apply-button" type="button">Apply scene.js</button>
+          </div>
+          <div class="editor-view" data-editor-view="json" hidden>
+            <div id="scene-json" class="monaco-editor-host" aria-label="Scene JSON editor"></div>
+            <button id="apply-json" class="apply-button" type="button">Apply JSON</button>
+            <p id="json-status" class="json-status" role="status"></p>
+          </div>
+        </section>
+      </aside>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

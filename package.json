@@ -1,0 +1,19 @@
+{
+  "name": "3ditor-js",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "start": "vite preview"
+  },
+  "dependencies": {
+    "cannon-es": "^0.20.0",
+    "monaco-editor": "^0.56.0",
+    "three": "^0.178.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.2"
+  }
+}
