@@ -3,67 +3,23 @@ export const SCENE_SCHEMA_VERSION = 1;
 export function createDefaultScene() {
   return {
     version: SCENE_SCHEMA_VERSION,
-    id: 'test-foundation',
+    id: 'main-scene',
     metadata: {
-      name: 'Foundation Scene',
+      name: 'Main Scene',
     },
     camera: {
       position: [3.8, 2.8, 5.5],
       target: [0, 0.6, 0],
     },
-    cameras: [
-      { id: 'player-camera', name: 'Player Camera', type: 'perspective', position: [0, 2.5, 6], target: [0, 1, 0], parent: 'cube-01', fov: 50, aspect: 1, near: 0.1, far: 1000 },
-    ],
+    cameras: [],
     lights: [
-      { id: 'ambient-01', type: 'hemisphere', skyColor: '#dceeff', groundColor: '#27313a', intensity: 2.2 },
-      { id: 'key-01', type: 'directional', color: '#ffd6a0', intensity: 3.5, position: [4, 6, 3], castShadow: true },
+      { id: 'ambient-01', name: 'Ambient Light', type: 'hemisphere', skyColor: '#dceeff', groundColor: '#27313a', intensity: 2.2 },
+      { id: 'key-01', name: 'Key Light', type: 'directional', color: '#ffd6a0', intensity: 3.5, position: [4, 6, 3], castShadow: true },
     ],
     objects: [
       {
-        id: 'cube-01',
-        name: 'Test Cube',
-        type: 'box',
-        position: [-5, 4, 0],
-        rotation: [0, 0, 0],
-        scale: [1.5, 1.5, 1.5],
-        material: {
-          color: '#f26b5e',
-          roughness: 0.32,
-          metalness: 0.08,
-        },
-        physics: {
-          enabled: true,
-          mass: 1,
-          collider: 'box',
-          size: [1.5, 1.5, 1.5],
-        },
-        scripts: [
-          { path: 'scripts/player.js', export: 'PlayerController', enabled: true },
-        ],
-      },
-      {
-        id: 'cube-02',
-        name: 'Test Box Blue',
-        type: 'box',
-        position: [0, 5, 0],
-        rotation: [0, 0.35, 0],
-        scale: [1.2, 1.2, 1.2],
-        material: { color: '#3287d6', roughness: 0.4, metalness: 0.05 },
-        physics: { enabled: true, mass: 1, collider: 'box', size: [1.2, 1.2, 1.2] },
-      },
-      {
-        id: 'cube-03',
-        name: 'Test Box Gold',
-        type: 'box',
-        position: [3, 7, 0],
-        rotation: [0, -0.25, 0],
-        scale: [1, 1, 1],
-        material: { color: '#f2b84f', roughness: 0.3, metalness: 0.12 },
-        physics: { enabled: true, mass: 1, collider: 'box', size: [1, 1, 1] },
-      },
-      {
-        id: 'floor-01',
-        name: 'Test Floor',
+        id: 'floor',
+        name: 'Floor',
         type: 'plane',
         position: [0, 0, 0],
         rotation: [-Math.PI / 2, 0, 0],
@@ -75,6 +31,10 @@ export function createDefaultScene() {
     splines: [],
     cutscenes: [],
     triggers: [],
+    audio: {
+      bgm: null,
+      emitters: [],
+    },
   };
 }
 

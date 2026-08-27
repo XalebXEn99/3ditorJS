@@ -1,11 +1,25 @@
 const DEFAULT_FILES = [
-  { path: 'main.js', type: 'javascript' },
-  { path: 'scenes/test-foundation.scene.js', type: 'scene' },
+  { path: 'main.js', type: 'javascript', content: `import { createScene } from './scenes/main.scene.js';
+
+const { scene, camera } = createScene();
+
+export { scene, camera };
+` },
+  { path: 'scenes/main.scene.js', type: 'scene', content: `import * as THREE from 'three';
+
+export function createScene() {
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+  scene.add(camera);
+  return { scene, camera };
+}
+` },
   { path: 'scripts/player.js', type: 'javascript', content: `export class PlayerController {
-  constructor({ mesh, physics, camera, speed = 4, jumpForce = 5 }) {
+  constructor({ mesh, physics, camera, audioManager, speed = 4, jumpForce = 5 }) {
     this.mesh = mesh;
     this.physics = physics;
     this.camera = camera;
+    this.audio = audioManager;
     this.speed = speed;
     this.jumpForce = jumpForce;
     this.keys = new Set();
@@ -46,8 +60,6 @@ const DEFAULT_FILES = [
   }
 }
 ` },
-  { path: 'animations/README.md', type: 'document' },
-  { path: 'menus/README.md', type: 'document' },
   { path: 'assets/models/.gitkeep', type: 'asset' },
   { path: 'assets/textures/.gitkeep', type: 'asset' },
   { path: 'audio/bgm/.gitkeep', type: 'audio' },
@@ -67,17 +79,11 @@ export function createScene() {
 }
 `;
 
-const MENU_TEMPLATE = `export function createMenu(root, actions) {
-  root.innerHTML = '<section class="menu"><h1>New menu</h1></section>';
-}
-`;
-
 function inferFileType(path) {
   if (path.endsWith('.scene.js') || path.endsWith('.scene.json')) return 'scene';
   if (path.endsWith('.vert') || path.endsWith('.frag')) return 'shader';
   if (path.startsWith('audio/')) return 'audio';
   if (path.startsWith('assets/')) return 'asset';
-  if (path.endsWith('.menu.js')) return 'menu';
   if (path.endsWith('.md') || path.endsWith('.json')) return 'document';
   return 'javascript';
 }
@@ -95,10 +101,10 @@ export class ProjectManager {
     return [...this.files.values()].sort((a, b) => a.path.localeCompare(b.path));
   }
 
-  createScene(name = 'new-scene') {
+  createScene(name = 'new-scene', sceneJSON = null) {
     const path = `scenes/${name.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase()}.scene.js`;
     if (this.files.has(path)) throw new Error(`File already exists: ${path}`);
-    const file = { path, type: 'scene', content: SCENE_TEMPLATE, sceneId: path };
+    const file = { path, type: 'scene', content: SCENE_TEMPLATE, sceneId: sceneJSON?.id || path, sceneJSON: sceneJSON ? structuredClone(sceneJSON) : null };
     this.files.set(path, file);
     this.onChange?.(this.listFiles());
     this.open(file);
@@ -109,16 +115,6 @@ export class ProjectManager {
     const path = `scripts/${name.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase()}.js`;
     if (this.files.has(path)) throw new Error(`File already exists: ${path}`);
     const file = { path, type: 'javascript', content: '' };
-    this.files.set(path, file);
-    this.onChange?.(this.listFiles());
-    this.open(file);
-    return file;
-  }
-
-  createMenu(name = 'new-menu') {
-    const path = `menus/${name.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase()}.menu.js`;
-    if (this.files.has(path)) throw new Error(`File already exists: ${path}`);
-    const file = { path, type: 'menu', content: MENU_TEMPLATE };
     this.files.set(path, file);
     this.onChange?.(this.listFiles());
     this.open(file);
@@ -141,7 +137,7 @@ export class ProjectManager {
       const path = `${folder}/${source.name}`;
       const file = {
         path,
-        type: folder === 'audio' ? 'audio' : 'asset',
+        type: folder.startsWith('audio/') ? 'audio' : 'asset',
         content: source,
         mimeType: source.type,
         size: source.size,

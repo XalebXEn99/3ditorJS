@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 
 export class CutsceneManager {
-  constructor({ camera, controls, onStateChange } = {}) {
+  constructor({ camera, controls, onStateChange, onAudioEvent } = {}) {
     this.camera = camera;
     this.controls = controls;
     this.onStateChange = onStateChange;
+    this.onAudioEvent = onAudioEvent;
     this.splines = new Map();
     this.cutscenes = new Map();
     this.active = null;
@@ -26,6 +27,12 @@ export class CutsceneManager {
     this.cutscenes.set(cutsceneJSON.id, structuredClone(cutsceneJSON));
   }
 
+  registerAudioEvent(cutsceneId, event) {
+    const cutscene = this.cutscenes.get(cutsceneId);
+    if (!cutscene) throw new Error(`Unknown cutscene: ${cutsceneId}`);
+    cutscene.events = [...(cutscene.events || []), structuredClone(event)];
+  }
+
   clear() {
     this.splines.clear();
     this.cutscenes.clear();
@@ -35,7 +42,7 @@ export class CutsceneManager {
   play(id) {
     const cutscene = this.cutscenes.get(id);
     if (!cutscene) throw new Error(`Unknown cutscene: ${id}`);
-    this.active = { cutscene, elapsed: 0, paused: false };
+    this.active = { cutscene, elapsed: 0, paused: false, firedEvents: new Set() };
     if (this.controls) this.controls.enabled = false;
     this.emitState('playing');
   }
@@ -74,6 +81,11 @@ export class CutsceneManager {
       const point = spline.getPoint(trackProgress);
       this.camera.position.copy(point);
       this.camera.lookAt(0, 0.6, 0);
+    }
+    for (const event of cutscene.events || []) {
+      if (event.type !== 'audio' || this.active.firedEvents.has(event.id) || this.active.elapsed < event.time) continue;
+      this.active.firedEvents.add(event.id);
+      this.onAudioEvent?.(event);
     }
     if (progress >= 1) this.stop();
   }

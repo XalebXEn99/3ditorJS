@@ -130,6 +130,54 @@ export class SceneManager {
     this.sceneJSON.cutscenes = [...(this.sceneJSON.cutscenes || []), structuredClone(cutscene)];
   }
 
+  addTrigger(trigger) {
+    if (!this.editTransaction) this.recordHistory();
+    this.sceneJSON.triggers = [...(this.sceneJSON.triggers || []), structuredClone(trigger)];
+  }
+
+  updateTrigger(id, settings) {
+    const trigger = this.sceneJSON?.triggers?.find((entry) => entry.id === id);
+    if (!trigger) throw new Error(`Unknown trigger: ${id}`);
+    this.recordHistory();
+    Object.assign(trigger, structuredClone(settings));
+  }
+
+  removeTrigger(id) {
+    const index = this.sceneJSON?.triggers?.findIndex((entry) => entry.id === id) ?? -1;
+    if (index < 0) return false;
+    this.recordHistory();
+    this.sceneJSON.triggers.splice(index, 1);
+    return true;
+  }
+
+  updateAudio(settings) {
+    if (!this.editTransaction) this.recordHistory();
+    this.sceneJSON.audio = { ...(this.sceneJSON.audio || { bgm: null, emitters: [] }), ...structuredClone(settings) };
+  }
+
+  addAudioEmitter(emitter) {
+    if (!this.editTransaction) this.recordHistory();
+    const audio = this.sceneJSON.audio || { bgm: null, emitters: [] };
+    audio.emitters = [...(audio.emitters || []), structuredClone(emitter)];
+    this.sceneJSON.audio = audio;
+  }
+
+  updateAudioEmitter(id, settings) {
+    const emitter = this.sceneJSON?.audio?.emitters?.find((entry) => entry.id === id);
+    if (!emitter) throw new Error(`Unknown audio emitter: ${id}`);
+    if (!this.editTransaction) this.recordHistory();
+    Object.assign(emitter, structuredClone(settings));
+  }
+
+  removeAudioEmitter(id) {
+    const emitters = this.sceneJSON?.audio?.emitters;
+    const index = emitters?.findIndex((entry) => entry.id === id) ?? -1;
+    if (index < 0) return false;
+    this.recordHistory();
+    emitters.splice(index, 1);
+    return true;
+  }
+
   updateObjectProperties(id, properties) {
     const objectJSON = this.sceneJSON?.objects?.find((entry) => entry.id === id);
     const mesh = this.getMesh(id);
@@ -170,7 +218,7 @@ export class SceneManager {
   renameSceneItem(type, id, name) {
     const nextName = name.trim() || id;
     if (type === 'object') return this.renameObject(id, nextName);
-    const collection = type === 'light' ? this.sceneJSON?.lights : type === 'camera' ? this.sceneJSON?.cameras : type === 'spline' ? this.sceneJSON?.splines : this.sceneJSON?.cutscenes;
+    const collection = type === 'light' ? this.sceneJSON?.lights : type === 'camera' ? this.sceneJSON?.cameras : type === 'spline' ? this.sceneJSON?.splines : type === 'trigger' ? this.sceneJSON?.triggers : this.sceneJSON?.cutscenes;
     const item = collection?.find((entry) => entry.id === id);
     if (!item) throw new Error(`Unknown scene item: ${id}`);
     this.recordHistory();

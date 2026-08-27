@@ -7,7 +7,6 @@
 The product has three entry pages:
 
 - `index.html`: the main scene editor.
-- `menu-editor.html`: the optional, code-first menu editor.
 - `project-manager.html`: the browser project manager.
 
 Three.js is the rendering and scene foundation. Cannon-es physics, trigger zones, cutscenes, UI menus, scripts, and project persistence are adjacent services. They do not replace the Three.js scene model.
@@ -52,19 +51,16 @@ This view maps the source modules and page entry points.
 ```mermaid
 flowchart TB
   Pages[index.html] --> Main[src/main.js]
-  Menu[menu-editor.html] --> MenuRuntime[src/menuEditor.js]
   ProjectPage[project-manager.html] --> ProjectRuntime[src/projectManagerPage.js]
   Main --> Scene[src/scene]
   Main --> Physics[src/physics]
   Main --> Animation[src/animation]
   Main --> Triggers[src/triggers]
-  Main --> UI[src/ui]
   Main --> Project[src/project]
   Main --> Scripts[src/scripts]
   Scene --> Three[three]
   Physics --> Cannon[cannon-es]
   Main --> Monaco[monaco-editor]
-  MenuRuntime --> UI
   ProjectRuntime --> Project
 ```
 
@@ -76,7 +72,6 @@ flowchart TB
 | `src/animation` | Three.js animation mixer wrapper, spline manipulation, and camera cutscene playback. |
 | `src/project` | Virtual project file registry, project storage contract, and IndexedDB implementation. |
 | `src/scripts` | Script listing and object attachment metadata. |
-| `src/ui` | Optional DOM menu runtime API. |
 | `src/main.js` | Editor orchestration, viewport interaction, inspectors, Monaco views, save/load, and play mode. |
 
 ## Runtime services
@@ -110,7 +105,7 @@ sequenceDiagram
 
 The active physics implementation is `CannonAdapter`. It maps a Three.js mesh to a Cannon body and supports box, sphere, cylinder, and capsule-style compound colliders. Dynamic bodies copy simulated position and rotation to their meshes after each physics step. The editor can temporarily make a dynamic body kinematic during gizmo dragging, then restore it on release.
 
-`TriggerManager` stores trigger metadata, creates optional wireframe helpers, and checks actor bounding boxes against trigger boxes. It emits `triggerEnter` and `triggerExit` events and can invoke named registered actions such as a cutscene start.
+`TriggerManager` stores trigger metadata, creates optional wireframe helpers, and checks actor bounding boxes against box or sphere areas. It emits `triggerEnter` and `triggerExit` events and can invoke named registered actions such as a cutscene start. `SceneManager` owns canonical trigger records, while the Scene Tree and inspector create, select, configure, and delete those records.
 
 ### Animation, splines, and cutscenes
 
@@ -120,11 +115,9 @@ The active physics implementation is `CannonAdapter`. It maps a Three.js mesh to
 
 The editor supports built-in Three.js materials including Basic, Phong, Standard, Physical, ShaderMaterial, and RawShaderMaterial where the schema supports them. Shader source is represented as project files under `shaders/` and imported by generated code with Vite's `?raw` convention. GLTF and GLB import uses `GLTFLoader`.
 
-### Projects, scripts, and menus
+### Projects and scripts
 
-`ProjectManager` provides an in-memory virtual file registry with project files, scenes, scripts, shaders, assets (models and textures), audio (BGM and SFX), animations, and menus. Folder-local creation actions add source files, while browser file pickers import local asset and audio files into the active IndexedDB project. Its browser persistence adapter stores projects and files in IndexedDB. `ScriptManager` tracks object-to-script attachments; scripts are generated as imports and instances but are not a general script execution sandbox.
-
-`UIManager` powers optional game menus. The menu editor is separate so scene editing does not require a menu. A scene without a registered menu is unaffected.
+`ProjectManager` provides an in-memory virtual file registry with project files, scenes, scripts, shaders, assets (models and textures), and audio (BGM and SFX). Folder-local creation actions add source files, while browser file pickers import local asset and audio files into the active IndexedDB project. Its browser persistence adapter stores projects and files in IndexedDB. `ScriptManager` tracks object-to-script attachments; scripts are generated as imports and instances but are not a general script execution sandbox.
 
 ### Development and quality checks
 

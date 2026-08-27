@@ -7,16 +7,16 @@ import { SceneManager } from './scene/SceneManager.js';
 import { createDefaultScene } from './scene/sceneSchema.js';
 import { generateSceneCode } from './scene/sceneCodeGenerator.js';
 import { parseSceneCode } from './scene/sceneCodeParser.js';
-import { addRigidBody, beginGrab, endGrab, initPhysics, moveGrabbedBody, moveKinematic, stepPhysics } from './physics/index.js';
+import { addRigidBody, beginGrab, endGrab, initPhysics, moveGrabbedBody, moveKinematic, onCollision, stepPhysics } from './physics/index.js';
 import { TriggerManager } from './triggers/TriggerManager.js';
 import { AnimationManager } from './animation/AnimationManager.js';
 import { CutsceneManager } from './animation/CutsceneManager.js';
-import { UIManager } from './ui/UIManager.js';
 import { SplineEditor } from './animation/SplineEditor.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ProjectManager } from './project/ProjectManager.js';
 import { IndexedDbProjectStorage } from './project/IndexedDbProjectStorage.js';
 import { ScriptManager } from './scripts/ScriptManager.js';
+import { AudioManager } from './audio/AudioManager.js';
 import './style.css';
 
 self.MonacoEnvironment = {
@@ -47,6 +47,12 @@ const cutscenePause = document.querySelector('#cutscene-pause');
 const cutsceneStop = document.querySelector('#cutscene-stop');
 const cutsceneStatus = document.querySelector('#cutscene-status');
 const cutsceneSelect = document.querySelector('#cutscene-select');
+const bgmSelect = document.querySelector('#bgm-select');
+const bgmVolume = document.querySelector('#bgm-volume');
+const bgmLoop = document.querySelector('#bgm-loop');
+const bgmAutoplay = document.querySelector('#bgm-autoplay');
+const playBgmButton = document.querySelector('#play-bgm');
+const stopBgmButton = document.querySelector('#stop-bgm');
 const sceneCodeView = document.querySelector('#scene-code');
 const applyCodeButton = document.querySelector('#apply-code');
 const jsonTab = document.querySelector('#json-tab');
@@ -96,14 +102,13 @@ const projectManager = new ProjectManager({
   onChange: () => {
     renderProjectTree();
     populateScripts();
+    populateBgmSelect();
   },
   onOpen: (file) => {
     projectStatus.textContent = `Opened ${file.path}`;
     if (file.type === 'scene') {
       showSceneWorkspace();
       if (file.sceneJSON) sceneManager.switchTo(file.sceneId);
-    } else if (file.type === 'menu') {
-      window.location.href = `./menu-editor.html?project=${encodeURIComponent(projectManager.projectId || '')}&menu=${encodeURIComponent(file.path)}`;
     } else {
       showFileWorkspace(file);
     }
@@ -129,7 +134,7 @@ function renderProjectTree() {
     if (!folders.has(folder)) folders.set(folder, []);
     folders.get(folder).push({ file, name });
   }
-  const folderOrder = ['project', 'scenes', 'scripts', 'shaders', 'assets', 'audio', 'animations', 'menus'];
+  const folderOrder = ['project', 'scenes', 'scripts', 'shaders', 'assets', 'audio'];
   for (const folder of folderOrder) {
     const files = folders.get(folder) || [];
     const folderLabel = document.createElement('p');
@@ -159,9 +164,8 @@ function renderProjectTree() {
       : folder === 'scripts' ? '+ New script'
         : folder === 'shaders' ? '+ New shader'
           : folder === 'assets' ? '+ Import asset'
-            : folder === 'audio' ? '+ Import audio'
-              : folder === 'menus' ? '+ New menu'
-                : null;
+            : folder === 'audio' ? '+ Import BGM / SFX'
+              : null;
     if (createLabel) {
       const createButton = document.createElement('button');
       createButton.type = 'button';
@@ -189,20 +193,27 @@ function restName(value) {
 
 function createProjectFile(folder) {
   if (folder === 'assets' || folder === 'audio') {
-    importProjectFiles(folder);
+    if (folder === 'audio') importAudioFiles();
+    else importProjectFiles(folder);
     return;
   }
-  const typeByFolder = { scenes: 'scene', scripts: 'javascript', shaders: 'shader', menus: 'menu' };
-  const prefixByFolder = { scenes: 'scene', scripts: 'script', shaders: 'shader', menus: 'menu' };
+  const typeByFolder = { scenes: 'scene', scripts: 'javascript', shaders: 'shader' };
+  const prefixByFolder = { scenes: 'scene', scripts: 'script', shaders: 'shader' };
   const name = `${prefixByFolder[folder]}-${projectManager.listFiles().filter((file) => file.type === typeByFolder[folder]).length + 1}`;
   try {
-    if (folder === 'scenes') projectManager.createScene(name);
+    if (folder === 'scenes') {
+      const sceneJSON = createDefaultScene();
+      sceneJSON.id = `scene-${Date.now()}`;
+      sceneJSON.metadata.name = name.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+      sceneManager.registerScene(sceneJSON.id, sceneJSON);
+      const file = projectManager.createScene(name, sceneJSON);
+      file.content = generateSceneCode(sceneJSON);
+    }
     if (folder === 'scripts') projectManager.createScript(name);
     if (folder === 'shaders') {
       const { vertexPath } = projectManager.createShaderFiles(name);
       projectManager.open(projectManager.files.get(vertexPath));
     }
-    if (folder === 'menus') projectManager.createMenu(name);
   } catch (error) {
     projectStatus.textContent = error.message;
   }
@@ -212,19 +223,24 @@ function importProjectFiles(folder) {
   const picker = document.createElement('input');
   picker.type = 'file';
   picker.multiple = true;
-  picker.accept = folder === 'audio' ? 'audio/*' : '.gltf,.glb,image/*';
+  picker.accept = folder.startsWith('audio/') ? 'audio/*' : '.gltf,.glb,image/*';
   picker.addEventListener('change', async () => {
     const added = projectManager.addImportedFiles(folder, picker.files);
     try {
       for (const file of added) {
         if (projectManager.storage && projectManager.projectId) await projectManager.saveProjectFile(file.path, file.content);
       }
-      projectStatus.textContent = added.length ? `Imported ${added.length} ${folder === 'audio' ? 'audio file' : 'asset'}${added.length === 1 ? '' : 's'}` : 'No files selected';
+      projectStatus.textContent = added.length ? `Imported ${added.length} ${folder.startsWith('audio/') ? 'audio file' : 'asset'}${added.length === 1 ? '' : 's'}` : 'No files selected';
     } catch (error) {
       projectStatus.textContent = error.message;
     }
   }, { once: true });
   picker.click();
+}
+
+function importAudioFiles() {
+  const category = window.confirm('Import background music? Choose Cancel to import sound effects.') ? 'bgm' : 'sfx';
+  importProjectFiles(`audio/${category}`);
 }
 
 async function deleteProjectFile(file) {
@@ -266,8 +282,26 @@ transformControls.addEventListener('dragging-changed', (event) => {
   if (event.value) {
     sceneManager.beginEdit();
     if (mesh) beginGrab(mesh);
+    if (activeSelection?.type === 'trigger') {
+      const trigger = triggerManager.triggers.get(activeSelection.id);
+      if (trigger) triggerGizmoEdit = { id: activeSelection.id, size: [...(trigger.data.size || [1, 1, 1])] };
+    }
   } else {
     if (mesh) endGrab(mesh);
+    if (triggerGizmoEdit) {
+      const trigger = triggerManager.triggers.get(triggerGizmoEdit.id);
+      if (trigger) {
+        const size = triggerGizmoEdit.size.map((value, index) => value * trigger.helper.scale.toArray()[index]);
+        trigger.helper.scale.set(1, 1, 1);
+        sceneManager.updateTrigger(triggerGizmoEdit.id, { position: trigger.helper.position.toArray(), size });
+        triggerManager.registerTrigger(sceneManager.exportJSON().triggers.find((entry) => entry.id === triggerGizmoEdit.id));
+        if (activeSelection?.type === 'trigger' && activeSelection.id === triggerGizmoEdit.id) transformControls.attach(triggerManager.triggers.get(triggerGizmoEdit.id).helper);
+        updateVectorFields(transformFields, 'Position', trigger.helper.position.toArray());
+        updateVectorFields(transformFields, 'Size', size);
+        renderJSON();
+      }
+      triggerGizmoEdit = null;
+    }
     sceneManager.endEdit();
   }
 });
@@ -292,6 +326,22 @@ transformControls.addEventListener('objectChange', () => {
     sceneManager.updateLight(activeSelection.id, { position: light.position.toArray() });
     lightHelpers.get(activeSelection.id)?.update();
     updateVectorFields(scenePropertyFields, 'Light position', light.position.toArray());
+  } else if (activeSelection?.type === 'trigger') {
+    const trigger = triggerManager.triggers.get(activeSelection.id);
+    if (!trigger) return;
+    if (gizmoMode === 'scale' && triggerGizmoEdit) {
+      const size = triggerGizmoEdit.size.map((value, index) => value * trigger.helper.scale.toArray()[index]);
+      updateVectorFields(transformFields, 'Size', size);
+    } else {
+      updateVectorFields(transformFields, 'Position', trigger.helper.position.toArray());
+    }
+  } else if (activeSelection?.type === 'audio') {
+    const helper = audioHelpers.get(activeSelection.id);
+    const emitter = audioManager.emitters.get(activeSelection.id);
+    if (!helper || !emitter) return;
+    sceneManager.updateAudioEmitter(activeSelection.id, { position: helper.position.toArray() });
+    emitter.data.position = helper.position.toArray();
+    updateVectorFields(propertyFields, 'Position', helper.position.toArray());
   }
   renderJSON();
 });
@@ -299,24 +349,15 @@ transformControls.addEventListener('objectChange', () => {
 const sceneManager = new SceneManager(scene);
 const triggerManager = new TriggerManager(scene);
 const animationManager = new AnimationManager();
-let menuPaused = false;
-const uiManager = new UIManager({
-  root: document.body,
-  sceneController: {
-    pause: () => {
-      menuPaused = true;
-      controls.enabled = false;
-    },
-    resume: () => {
-      menuPaused = false;
-      controls.enabled = true;
-    },
-  },
-});
 const cutsceneManager = new CutsceneManager({
   camera,
   controls,
   onStateChange: (state) => { cutsceneStatus.textContent = state; },
+  onAudioEvent: (event) => audioManager.playSfx(event.path, { position: event.position || [0, 0, 0], volume: event.volume ?? 0.8, radius: event.radius ?? 12 }),
+});
+const audioManager = new AudioManager({
+  camera,
+  getFile: (path) => projectManager.files.get(path),
 });
 const splineEditor = new SplineEditor({
   scene,
@@ -333,6 +374,7 @@ const splineEditor = new SplineEditor({
   },
 });
 const physicsHelpers = new Map();
+const audioHelpers = new Map();
 let showPhysicsBodies = false;
 const sceneData = createDefaultScene();
 sceneManager.loadFromJSON(sceneData);
@@ -350,25 +392,7 @@ for (const cameraJSON of sceneData.cameras || []) {
   if (cameraJSON.parent) sceneManager.getMesh(cameraJSON.parent)?.add(sceneCamera);
 }
 sceneManager.registerScene(sceneData.id, sceneData);
-const alternateScene = structuredClone(sceneData);
-alternateScene.id = 'alternate-test';
-alternateScene.metadata.name = 'Alternate Test Scene';
-alternateScene.triggers = [];
-alternateScene.objects = alternateScene.objects.map((objectJSON) => ({
-  ...objectJSON,
-  position: objectJSON.id === 'cube-01' ? [5, 4, 0] : objectJSON.position,
-  material: objectJSON.id === 'cube-01'
-    ? { ...objectJSON.material, color: '#55b86a' }
-    : objectJSON.material,
-}));
-sceneManager.registerScene(alternateScene.id, alternateScene);
-projectManager.attachScene('scenes/test-foundation.scene.js', sceneData);
-projectManager.files.set('scenes/alternate-test.scene.js', {
-  path: 'scenes/alternate-test.scene.js',
-  type: 'scene',
-  sceneId: alternateScene.id,
-  sceneJSON: structuredClone(alternateScene),
-});
+projectManager.attachScene('scenes/main.scene.js', sceneData);
 renderProjectTree();
 for (const lightJSON of sceneData.lights || []) {
   const light = lightJSON.type === 'hemisphere'
@@ -393,6 +417,7 @@ for (const spline of sceneData.splines || []) cutsceneManager.registerSpline(spl
 for (const cutscene of sceneData.cutscenes || []) cutsceneManager.registerCutscene(cutscene);
 if (sceneData.splines?.[0]) splineEditor.load(sceneData.splines[0].points);
 for (const trigger of sceneData.triggers || []) triggerManager.registerTrigger(trigger);
+rebuildAudio();
 triggerManager.on('triggerEnter', (trigger, actor) => {
   console.info(trigger.params?.message || `${actor.name} entered ${trigger.id}`);
 });
@@ -410,11 +435,8 @@ function transitionToScene(sceneId) {
   }, 350);
 }
 triggerManager.registerAction('switchScene', (params) => transitionToScene(params.sceneId));
-
-window.addEventListener('keydown', (event) => {
-  if (event.key !== 'Escape' || !uiManager.hasMenu('pause')) return;
-  uiManager.toggle('pause');
-});
+triggerManager.registerAction('playCutscene', (params) => cutsceneManager.play(params.cutsceneId));
+triggerManager.registerAction('playSfx', (params, actor) => audioManager.playSfx(params.path, { position: actor.position.toArray(), volume: params.volume ?? 0.8, radius: params.radius ?? 12 }));
 
 function rebuildPhysics() {
   initPhysics({ gravity: [0, -9.81, 0], engine: 'cannon' });
@@ -430,6 +452,20 @@ function rebuildPhysics() {
     if (objectJSON.physics?.enabled) {
       const mesh = sceneManager.getMesh(objectJSON.id);
       addRigidBody(mesh, objectJSON.physics);
+      if (objectJSON.physics.impactSfx) {
+        let lastImpactAt = 0;
+        onCollision(mesh, (_mesh, _otherBody, event) => {
+          const impact = Math.abs(event.contact?.getImpactVelocityAlongNormal?.() || 0);
+          const now = performance.now();
+          if (impact < (objectJSON.physics.impactThreshold ?? 1.5) || now - lastImpactAt < (objectJSON.physics.impactCooldown ?? 0.12) * 1000) return;
+          lastImpactAt = now;
+          audioManager.playSfx(objectJSON.physics.impactSfx, {
+            position: mesh.position.toArray(),
+            volume: Math.min(objectJSON.physics.impactVolume ?? 0.7, impact / 8),
+            radius: objectJSON.physics.impactRadius ?? 12,
+          });
+        });
+      }
       const size = objectJSON.physics.size || [1, 1, 1];
       const radius = objectJSON.physics.radius || size[0] / 2;
       const height = objectJSON.physics.height || size[1];
@@ -469,6 +505,34 @@ function rebuildPhysics() {
   }
 }
 
+function rebuildAudio() {
+  const audio = sceneManager.exportJSON().audio || { bgm: null, emitters: [] };
+  audioManager.stopBgm();
+  audioManager.clearEmitters();
+  for (const helper of audioHelpers.values()) {
+    scene.remove(helper);
+    helper.geometry.dispose();
+    helper.material.dispose();
+  }
+  audioHelpers.clear();
+  try {
+    if (audio.bgm?.path) audioManager.setBgm(audio.bgm);
+    for (const emitter of audio.emitters || []) {
+      audioManager.registerEmitter(emitter);
+      const helper = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.SphereGeometry(emitter.radius ?? 12, 20, 12)),
+        new THREE.LineBasicMaterial({ color: 0x70b8d8 }),
+      );
+      helper.position.fromArray(emitter.position || [0, 1, 0]);
+      helper.userData.audioEmitterId = emitter.id;
+      scene.add(helper);
+      audioHelpers.set(emitter.id, helper);
+    }
+  } catch (error) {
+    projectStatus.textContent = error.message;
+  }
+}
+
 sceneManager.activeSceneId = sceneData.id;
 sceneManager.onSceneChanged = (id, nextScene) => {
   triggerManager.clear();
@@ -478,6 +542,7 @@ sceneManager.onSceneChanged = (id, nextScene) => {
   for (const cutscene of nextScene.cutscenes || []) cutsceneManager.registerCutscene(cutscene);
   splineEditor.load(nextScene.splines?.[0]?.points || []);
   rebuildPhysics();
+  rebuildAudio();
   camera.position.fromArray(nextScene.camera?.position || [3.8, 2.8, 5.5]);
   controls.target.fromArray(nextScene.camera?.target || [0, 0.6, 0]);
   controls.update();
@@ -502,6 +567,7 @@ let syncingEditors = false;
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let gizmoMode = 'translate';
+let triggerGizmoEdit = null;
 
 function setGizmoMode(mode) {
   gizmoMode = mode;
@@ -636,6 +702,30 @@ function populateScripts() {
   scriptSelect.disabled = scriptSelect.options.length === 0;
 }
 
+function listAudioFiles(folder) {
+  return projectManager.listFiles().filter((file) => file.type === 'audio' && file.path.startsWith(`audio/${folder}/`) && !file.path.endsWith('.gitkeep'));
+}
+
+function populateBgmSelect() {
+  const bgm = sceneManager.exportJSON()?.audio?.bgm;
+  const current = bgm?.path || '';
+  bgmSelect.replaceChildren();
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = 'No background music';
+  bgmSelect.append(none);
+  for (const file of listAudioFiles('bgm')) {
+    const option = document.createElement('option');
+    option.value = file.path;
+    option.textContent = file.path.split('/').at(-1);
+    bgmSelect.append(option);
+  }
+  bgmSelect.value = current;
+  bgmVolume.value = bgm?.volume ?? 0.7;
+  bgmLoop.checked = bgm?.loop !== false;
+  bgmAutoplay.checked = Boolean(bgm?.autoplay);
+}
+
 function editSelectedScript() {
   const file = scriptManager.listScripts().find((entry) => entry.path === scriptSelect.value);
   if (!file) return;
@@ -736,6 +826,7 @@ function applyJSON() {
     sceneManager.loadFromJSON(nextScene);
     triggerManager.clear();
     for (const trigger of nextScene.triggers || []) triggerManager.registerTrigger(trigger);
+    rebuildAudio();
     rebuildPhysics();
     renderObjectList();
     selectObject(nextScene.objects[0]?.id || null);
@@ -755,6 +846,7 @@ function applyCode() {
     sceneManager.loadFromJSON(nextScene);
     triggerManager.clear();
     for (const trigger of nextScene.triggers || []) triggerManager.registerTrigger(trigger);
+    rebuildAudio();
     rebuildPhysics();
     renderObjectList();
     selectObject(nextScene.objects[0]?.id || null);
@@ -769,7 +861,7 @@ function applyCode() {
 async function saveProject() {
   try {
     await projectManager.connectStorage(projectStorage, 'Untitled Project', activeProjectId);
-    await projectManager.saveProjectFile('scenes/test-foundation.scene.json', jsonEditor.getValue());
+    await projectManager.saveProjectFile('scenes/main.scene.json', jsonEditor.getValue());
     await projectManager.saveAllFiles();
     projectStatus.textContent = 'Project saved in browser storage';
   } catch (error) {
@@ -780,7 +872,7 @@ async function saveProject() {
 async function loadProject() {
   try {
     await projectManager.connectStorage(projectStorage, 'Untitled Project', activeProjectId);
-    const content = await projectManager.loadProjectFile('scenes/test-foundation.scene.json');
+    const content = await projectManager.loadProjectFile('scenes/main.scene.json');
     if (!content) {
       projectStatus.textContent = 'No saved scene found';
       return;
@@ -797,6 +889,7 @@ async function loadProject() {
 projectSave.addEventListener('click', saveProject);
 projectLoad.addEventListener('click', loadProject);
 populateScripts();
+populateBgmSelect();
 scriptSelect.addEventListener('change', editSelectedScript);
 createScriptButton.addEventListener('click', () => {
   const name = window.prompt('Script name', 'player-controller');
@@ -815,6 +908,18 @@ createScriptButton.addEventListener('click', () => {
 editScriptButton.addEventListener('click', editSelectedScript);
 saveScriptButton.addEventListener('click', saveSelectedScript);
 playScene.addEventListener('click', playSelectedCharacter);
+function updateBgm() {
+  sceneManager.updateAudio({ bgm: bgmSelect.value ? { path: bgmSelect.value, volume: Number(bgmVolume.value) || 0, loop: bgmLoop.checked, autoplay: bgmAutoplay.checked } : null });
+  rebuildAudio();
+  renderJSON();
+}
+
+bgmSelect.addEventListener('change', updateBgm);
+bgmVolume.addEventListener('change', updateBgm);
+bgmLoop.addEventListener('change', updateBgm);
+bgmAutoplay.addEventListener('change', updateBgm);
+playBgmButton.addEventListener('click', () => audioManager.playBgm());
+stopBgmButton.addEventListener('click', () => audioManager.stopBgm());
 
 function selectObject(id) {
   selectedId = id;
@@ -894,6 +999,9 @@ function selectObject(id) {
         { label: 'Height', type: 'number', key: 'height', value: physics.height ?? 1, step: '0.1', min: '0.01' },
         { label: 'Linear damping', type: 'number', key: 'linearDamping', value: physics.linearDamping ?? 0.01, step: '0.01', min: '0', max: '1' },
         { label: 'Angular damping', type: 'number', key: 'angularDamping', value: physics.angularDamping ?? 0.01, step: '0.01', min: '0', max: '1' },
+        { label: 'Impact SFX', type: 'select', key: 'impactSfx', value: physics.impactSfx || '', options: ['', ...listAudioFiles('sfx').map((file) => file.path)] },
+        { label: 'Impact threshold', type: 'number', key: 'impactThreshold', value: physics.impactThreshold ?? 1.5, step: '0.1', min: '0' },
+        { label: 'Impact cooldown', type: 'number', key: 'impactCooldown', value: physics.impactCooldown ?? 0.12, step: '0.01', min: '0' },
         { label: 'Velocity X', type: 'number', key: 'velocityX', value: physics.velocity?.[0] ?? 0, step: '0.1' },
         { label: 'Velocity Y', type: 'number', key: 'velocityY', value: physics.velocity?.[1] ?? 0, step: '0.1' },
         { label: 'Velocity Z', type: 'number', key: 'velocityZ', value: physics.velocity?.[2] ?? 0, step: '0.1' },
@@ -985,31 +1093,46 @@ function openShaderEditor(id, shaderControls) {
   if (!objectJSON) return;
   const material = objectJSON.material || {};
   const shaderFiles = material.shaderFiles || projectManager.createShaderFiles(`${objectJSON.name || objectJSON.id}-material`);
-  const vertexShader = material.vertexShader || 'void main() {\n  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);\n}';
-  const fragmentShader = material.fragmentShader || 'void main() {\n  gl_FragColor = vec4(0.2, 0.6, 1.0, 1.0);\n}';
+  const vertexFile = projectManager.files.get(shaderFiles.vertexPath);
+  const fragmentFile = projectManager.files.get(shaderFiles.fragmentPath);
+  const vertexShader = vertexFile?.content || material.vertexShader || 'void main() {\n  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);\n}';
+  const fragmentShader = fragmentFile?.content || material.fragmentShader || 'void main() {\n  gl_FragColor = vec4(0.2, 0.6, 1.0, 1.0);\n}';
+  if (vertexFile) vertexFile.content = vertexShader;
+  if (fragmentFile) fragmentFile.content = fragmentShader;
   sceneManager.updateObjectProperties(id, { material: { shaderFiles, vertexShader, fragmentShader } });
   shaderControls.replaceChildren();
   const files = document.createElement('p');
   files.className = 'property-heading';
   files.textContent = `${shaderFiles.vertexPath} / ${shaderFiles.fragmentPath}`;
   shaderControls.append(files);
-  addShaderEditor(shaderControls, 'Vertex shader', 'vertexShader', vertexShader);
-  addShaderEditor(shaderControls, 'Fragment shader', 'fragmentShader', fragmentShader);
+  addShaderEditor(shaderControls, 'Vertex shader', 'vertexShader', shaderFiles.vertexPath, vertexShader);
+  addShaderEditor(shaderControls, 'Fragment shader', 'fragmentShader', shaderFiles.fragmentPath, fragmentShader);
   renderJSON();
 }
 
-function addShaderEditor(parent, labelText, key, value) {
+function addShaderEditor(parent, labelText, key, path, value) {
   const heading = document.createElement('p');
   heading.className = 'property-heading';
   heading.textContent = labelText;
   const host = document.createElement('div');
   host.className = 'shader-editor-host';
   parent.append(heading, host);
-  const editor = monaco.editor.create(host, { ...editorOptions, language: 'cpp', value, minimap: { enabled: false } });
+  let model = projectFileModels.get(path);
+  if (!model) {
+    model = monaco.editor.createModel(value, 'cpp', monaco.Uri.parse(`inmemory://3ditorjs/${path}`));
+    projectFileModels.set(path, model);
+  } else {
+    model.setValue(value);
+    monaco.editor.setModelLanguage(model, 'cpp');
+  }
+  const editor = monaco.editor.create(host, { ...editorOptions, language: 'cpp', minimap: { enabled: false }, model });
   addFullscreenControl(host, labelText);
   editor.onDidChangeModelContent(() => {
     if (!selectedId) return;
-    sceneManager.updateObjectProperties(selectedId, { material: { [key]: editor.getValue() } });
+    const source = editor.getValue();
+    const file = projectManager.files.get(path);
+    if (file) file.content = source;
+    sceneManager.updateObjectProperties(selectedId, { material: { [key]: source } });
     const mesh = sceneManager.getMesh(selectedId);
     mesh.material.needsUpdate = true;
     renderJSON();
@@ -1194,6 +1317,50 @@ function addNumberField(parent, labelText, value, onInput) {
   parent.append(row);
 }
 
+function addTextField(parent, labelText, value, onInput) {
+  const row = document.createElement('label');
+  row.className = 'property-row';
+  const label = document.createElement('span');
+  label.textContent = labelText;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = value || '';
+  input.addEventListener('change', () => onInput(input.value.trim()));
+  row.append(label, input);
+  parent.append(row);
+}
+
+function addCheckboxField(parent, labelText, checked, onInput) {
+  const row = document.createElement('label');
+  row.className = 'display-toggle';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = checked;
+  input.addEventListener('change', () => onInput(input.checked));
+  const label = document.createElement('span');
+  label.textContent = labelText;
+  row.append(input, label);
+  parent.append(row);
+}
+
+function addSelectField(parent, labelText, value, options, onInput) {
+  const row = document.createElement('label');
+  row.className = 'property-row';
+  const label = document.createElement('span');
+  label.textContent = labelText;
+  const select = document.createElement('select');
+  for (const optionData of options) {
+    const option = document.createElement('option');
+    option.value = optionData.value;
+    option.textContent = optionData.label;
+    select.append(option);
+  }
+  select.value = value || '';
+  select.addEventListener('change', () => onInput(select.value));
+  row.append(label, select);
+  parent.append(row);
+}
+
 function addVectorFields(parent, labelText, values, onInput) {
   const heading = document.createElement('p');
   heading.className = 'property-heading';
@@ -1214,6 +1381,28 @@ function addVectorFields(parent, labelText, values, onInput) {
     row.append(input);
   });
   parent.append(row);
+}
+
+function addTriggerTransformFields(labelText, gizmoModeName, values, onInput) {
+  const row = document.createElement('div');
+  row.className = 'transform-row';
+  row.dataset.vectorField = labelText;
+  const label = document.createElement('button');
+  label.type = 'button';
+  label.dataset.gizmoMode = gizmoModeName;
+  label.setAttribute('aria-pressed', String(gizmoMode === gizmoModeName));
+  label.textContent = labelText;
+  label.addEventListener('click', () => setGizmoMode(gizmoModeName));
+  row.append(label);
+  values.forEach((value) => {
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '0.1';
+    input.value = value.toFixed(2);
+    input.addEventListener('input', () => onInput([...row.querySelectorAll('input')].map((entry) => Number(entry.value) || 0)));
+    row.append(input);
+  });
+  transformFields.append(row);
 }
 
 function updateVectorFields(parent, labelText, values) {
@@ -1309,6 +1498,56 @@ function selectCutscene(id) {
     cutsceneManager.registerCutscene({ ...cutscene, duration: value });
     renderJSON();
   });
+  const cueHeading = document.createElement('p');
+  cueHeading.className = 'property-heading';
+  cueHeading.textContent = 'Sound cues';
+  animationPropertyFields.append(cueHeading);
+  const cueTime = document.createElement('input');
+  cueTime.type = 'number';
+  cueTime.min = '0';
+  cueTime.max = String(cutscene.duration);
+  cueTime.step = '0.1';
+  cueTime.value = '0';
+  cueTime.setAttribute('aria-label', 'Sound cue time');
+  const cueSound = document.createElement('select');
+  cueSound.setAttribute('aria-label', 'Sound cue effect');
+  for (const file of listAudioFiles('sfx')) {
+    const option = document.createElement('option');
+    option.value = file.path;
+    option.textContent = file.path.split('/').at(-1);
+    cueSound.append(option);
+  }
+  const addCue = document.createElement('button');
+  addCue.type = 'button';
+  addCue.className = 'cutscene-button';
+  addCue.textContent = 'Add sound cue';
+  addCue.disabled = cueSound.options.length === 0;
+  addCue.addEventListener('click', () => {
+    const event = { id: `audio_cue_${Date.now()}`, type: 'audio', time: Number(cueTime.value) || 0, path: cueSound.value, volume: 0.8, radius: 12 };
+    const events = [...(cutscene.events || []), event];
+    sceneManager.updateCutscene(id, { events });
+    cutsceneManager.registerCutscene({ ...cutscene, events });
+    selectCutscene(id);
+    renderJSON();
+  });
+  const cueForm = document.createElement('div');
+  cueForm.className = 'cutscene-buttons';
+  cueForm.append(cueTime, cueSound, addCue);
+  animationPropertyFields.append(cueForm);
+  (cutscene.events || []).filter((event) => event.type === 'audio').forEach((event) => {
+    const removeCue = document.createElement('button');
+    removeCue.type = 'button';
+    removeCue.className = 'cutscene-button';
+    removeCue.textContent = `Remove ${event.path.split('/').at(-1)} at ${event.time}s`;
+    removeCue.addEventListener('click', () => {
+      const events = cutscene.events.filter((entry) => entry.id !== event.id);
+      sceneManager.updateCutscene(id, { events });
+      cutsceneManager.registerCutscene({ ...cutscene, events });
+      selectCutscene(id);
+      renderJSON();
+    });
+    animationPropertyFields.append(removeCue);
+  });
   const track = cutscene.tracks?.find((entry) => entry.type === 'spline');
   const spline = sceneManager.exportJSON().splines?.find((entry) => entry.id === track?.path);
   if (spline) {
@@ -1342,6 +1581,138 @@ function selectCutscene(id) {
     splineEditor.load(spline.points);
     splineEditor.setVisible(splineToggle.checked);
   }
+}
+
+function addTriggerArea(type) {
+  const id = `trigger_${Date.now()}`;
+  const trigger = {
+    id,
+    name: `${type === 'sphere' ? 'Sphere' : 'Box'} Trigger`,
+    type,
+    position: [0, 1, 0],
+    size: type === 'sphere' ? [3, 3, 3] : [3, 2, 3],
+    action: '',
+    params: {},
+  };
+  sceneManager.addTrigger(trigger);
+  triggerManager.registerTrigger(trigger);
+  triggerManager.setVisible(true);
+  triggerToggle.checked = true;
+  renderObjectList();
+  selectTrigger(id);
+  renderJSON();
+}
+
+function updateTriggerArea(id, settings) {
+  sceneManager.updateTrigger(id, settings);
+  const trigger = sceneManager.exportJSON().triggers.find((entry) => entry.id === id);
+  triggerManager.updateTrigger(trigger);
+  renderJSON();
+}
+
+function selectTrigger(id) {
+  const trigger = sceneManager.exportJSON().triggers?.find((entry) => entry.id === id);
+  if (!trigger) return;
+  selectedId = null;
+  activeSelection = { type: 'trigger', id };
+  sceneDeleteObject.disabled = false;
+  sceneDuplicateObject.disabled = true;
+  transformControls.detach();
+  splineEditor.detachGizmo();
+  const triggerRuntime = triggerManager.triggers.get(id);
+  if (triggerRuntime) transformControls.attach(triggerRuntime.helper);
+  selectionLabel.contentEditable = 'true';
+  selectionLabel.textContent = trigger.name || trigger.id;
+  transformFields.replaceChildren();
+  propertyFields.replaceChildren();
+  scenePropertyFields.replaceChildren();
+  animationPropertyFields.replaceChildren();
+  scriptAttachmentFields.replaceChildren();
+  if (gizmoMode !== 'translate' && gizmoMode !== 'scale') setGizmoMode('translate');
+  addTriggerTransformFields('Position', 'translate', trigger.position, (position) => updateTriggerArea(id, { position }));
+  addTriggerTransformFields('Size', 'scale', trigger.size, (size) => updateTriggerArea(id, { size }));
+  setGizmoMode(gizmoMode);
+  const heading = document.createElement('p');
+  heading.className = 'property-heading';
+  heading.textContent = trigger.type === 'sphere' ? 'Sphere area' : 'Box area';
+  propertyFields.append(heading);
+  const actionRow = document.createElement('label');
+  actionRow.className = 'property-row';
+  const actionLabel = document.createElement('span');
+  actionLabel.textContent = 'On enter';
+  const actionSelect = document.createElement('select');
+  for (const [value, label] of [['', 'No action'], ['switchScene', 'Switch scene'], ['playCutscene', 'Play cutscene'], ['playSfx', 'Play sound effect']]) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    option.selected = trigger.action === value;
+    actionSelect.append(option);
+  }
+  actionSelect.addEventListener('change', () => {
+    updateTriggerArea(id, { action: actionSelect.value, params: {} });
+    selectTrigger(id);
+  });
+  actionRow.append(actionLabel, actionSelect);
+  propertyFields.append(actionRow);
+  if (trigger.action === 'switchScene') {
+    const scenes = [...sceneManager.scenes.entries()].map(([sceneId, sceneJSON]) => ({ value: sceneId, label: sceneJSON.metadata?.name || sceneId }));
+    addSelectField(propertyFields, 'Scene', trigger.params?.sceneId, scenes, (sceneId) => updateTriggerArea(id, { params: { sceneId } }));
+  }
+  if (trigger.action === 'playCutscene') {
+    const cutscenes = (sceneManager.exportJSON().cutscenes || []).map((cutscene) => ({ value: cutscene.id, label: cutscene.name || cutscene.id }));
+    addSelectField(propertyFields, 'Cutscene', trigger.params?.cutsceneId, cutscenes, (cutsceneId) => updateTriggerArea(id, { params: { cutsceneId } }));
+  }
+  if (trigger.action === 'playSfx') {
+    const effects = listAudioFiles('sfx').map((file) => ({ value: file.path, label: file.path.split('/').at(-1) }));
+    addSelectField(propertyFields, 'Sound effect', trigger.params?.path, effects, (path) => updateTriggerArea(id, { params: { path } }));
+  }
+}
+
+function selectAudioEmitter(id) {
+  const emitter = sceneManager.exportJSON().audio?.emitters?.find((entry) => entry.id === id);
+  const helper = audioHelpers.get(id);
+  if (!emitter || !helper) return;
+  selectedId = null;
+  activeSelection = { type: 'audio', id };
+  sceneDeleteObject.disabled = false;
+  sceneDuplicateObject.disabled = true;
+  transformControls.detach();
+  splineEditor.detachGizmo();
+  transformControls.attach(helper);
+  selectionLabel.contentEditable = 'true';
+  selectionLabel.textContent = emitter.name || emitter.id;
+  transformFields.replaceChildren();
+  propertyFields.replaceChildren();
+  scenePropertyFields.replaceChildren();
+  animationPropertyFields.replaceChildren();
+  scriptAttachmentFields.replaceChildren();
+  addVectorFields(propertyFields, 'Position', emitter.position, (position) => updateAudioEmitter(id, { position }));
+  addNumberField(propertyFields, 'Volume', emitter.volume ?? 1, (volume) => updateAudioEmitter(id, { volume }));
+  addNumberField(propertyFields, 'Radius', emitter.radius ?? 12, (radius) => updateAudioEmitter(id, { radius }));
+  addSelectField(propertyFields, 'Sound effect', emitter.path, listAudioFiles('sfx').map((file) => ({ value: file.path, label: file.path.split('/').at(-1) })), (path) => updateAudioEmitter(id, { path }));
+  addCheckboxField(propertyFields, 'Loop sound', emitter.loop !== false, (loop) => updateAudioEmitter(id, { loop }));
+  addCheckboxField(propertyFields, 'Autoplay after interaction', emitter.autoplay !== false, (autoplay) => updateAudioEmitter(id, { autoplay }));
+  const preview = document.createElement('div');
+  preview.className = 'cutscene-buttons';
+  const play = document.createElement('button');
+  play.type = 'button';
+  play.className = 'cutscene-button';
+  play.textContent = 'Play sound';
+  play.addEventListener('click', () => audioManager.playEmitter(id));
+  const stop = document.createElement('button');
+  stop.type = 'button';
+  stop.className = 'cutscene-button';
+  stop.textContent = 'Stop sound';
+  stop.addEventListener('click', () => audioManager.stopEmitter(id));
+  preview.append(play, stop);
+  propertyFields.append(preview);
+}
+
+function updateAudioEmitter(id, settings) {
+  sceneManager.updateAudioEmitter(id, settings);
+  rebuildAudio();
+  if (activeSelection?.type === 'audio' && activeSelection.id === id) transformControls.attach(audioHelpers.get(id));
+  renderJSON();
 }
 
 function renderObjectList() {
@@ -1385,6 +1756,23 @@ function renderObjectList() {
     cutsceneButton.addEventListener('click', () => selectCutscene(cutscene.id));
     objectList.append(cutsceneButton);
   }
+  for (const trigger of sceneManager.exportJSON().triggers || []) {
+    const triggerButton = document.createElement('button');
+    triggerButton.type = 'button';
+    triggerButton.className = 'object-entry scene-node';
+    triggerButton.classList.toggle('is-selected', activeSelection?.type === 'trigger' && activeSelection.id === trigger.id);
+    triggerButton.textContent = `Trigger: ${trigger.name || trigger.id}`;
+    triggerButton.addEventListener('click', () => selectTrigger(trigger.id));
+    objectList.append(triggerButton);
+  }
+  for (const emitter of sceneManager.exportJSON().audio?.emitters || []) {
+    const emitterButton = document.createElement('button');
+    emitterButton.type = 'button';
+    emitterButton.className = 'object-entry scene-node';
+    emitterButton.textContent = `Audio: ${emitter.name || emitter.id}`;
+    emitterButton.addEventListener('click', () => selectAudioEmitter(emitter.id));
+    objectList.append(emitterButton);
+  }
   for (const objectJSON of sceneManager.exportJSON().objects) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -1397,7 +1785,7 @@ function renderObjectList() {
 }
 
 function deleteSelectedSceneItem() {
-  if (!activeSelection || !['object', 'light', 'cutscene'].includes(activeSelection.type)) return;
+  if (!activeSelection || !['object', 'light', 'cutscene', 'trigger', 'audio'].includes(activeSelection.type)) return;
   if (activeSelection.type === 'light' && activeSelection.id === 'ambient-01') return;
   if (!window.confirm('Delete the selected scene item?')) return;
   if (activeSelection?.type === 'object') {
@@ -1416,6 +1804,12 @@ function deleteSelectedSceneItem() {
     sceneManager.removeCutscene(activeSelection.id);
     for (const track of cutscene?.tracks || []) cutsceneManager.splines.delete(track.path);
     activeCutsceneId = null;
+  } else if (activeSelection?.type === 'trigger') {
+    triggerManager.unregisterTrigger(activeSelection.id);
+    sceneManager.removeTrigger(activeSelection.id);
+  } else if (activeSelection?.type === 'audio') {
+    sceneManager.removeAudioEmitter(activeSelection.id);
+    rebuildAudio();
   } else {
     return;
   }
@@ -1447,6 +1841,26 @@ function nextName(type) {
 }
 
 function addSceneObject(type) {
+  if (type === 'audio-emitter') {
+    const sound = listAudioFiles('sfx')[0];
+    if (!sound) {
+      objectModalStatus.textContent = 'Import a sound effect in audio/sfx before adding an emitter.';
+      return;
+    }
+    const emitter = { id: `audio_${Date.now()}`, name: 'Audio Emitter', path: sound.path, position: [0, 1, 0], volume: 0.8, radius: 12, loop: true, autoplay: true };
+    sceneManager.addAudioEmitter(emitter);
+    rebuildAudio();
+    renderObjectList();
+    selectAudioEmitter(emitter.id);
+    renderJSON();
+    hideObjectModal();
+    return;
+  }
+  if (type === 'box-trigger' || type === 'sphere-trigger') {
+    addTriggerArea(type === 'sphere-trigger' ? 'sphere' : 'box');
+    hideObjectModal();
+    return;
+  }
   if (type === 'directional-light' || type === 'point-light') {
     const id = `${type.replace('-', '_')}_${Date.now()}`;
     const lightJSON = {
@@ -1735,14 +2149,14 @@ function animate() {
       renderJSON();
     }
   }
-  if (!menuPaused) {
-    stepPhysics(1 / 60);
-    animationManager.update(1 / 60);
-    cutsceneManager.update(1 / 60);
-  }
+  stepPhysics(1 / 60);
+  animationManager.update(1 / 60);
+  cutsceneManager.update(1 / 60);
+  audioManager.update();
   const dynamicActors = [...sceneManager.objectMeshes.values()]
     .filter((mesh) => (mesh.userData.sceneObject?.physics?.mass || 0) > 0);
   triggerManager.update(dynamicActors);
+  audioManager.updateEmitterActors(playTarget ? [playTarget] : dynamicActors.slice(0, 1));
   for (const [id, helper] of physicsHelpers) {
     const mesh = sceneManager.getMesh(id);
     if (mesh) {
@@ -1755,7 +2169,7 @@ function animate() {
 }
 
 renderObjectList();
-selectObject('cube-01');
+selectObject(null);
 renderJSON();
 resizeRenderer();
 animate();
@@ -1764,7 +2178,7 @@ async function openRequestedProject() {
   if (!activeProjectId) return;
   try {
     const project = await projectManager.connectStorage(projectStorage, 'Untitled Project', activeProjectId);
-    const content = await projectManager.loadProjectFile('scenes/test-foundation.scene.json');
+    const content = await projectManager.loadProjectFile('scenes/main.scene.json');
     if (content) {
       jsonEditor.setValue(content);
       applyJSON();

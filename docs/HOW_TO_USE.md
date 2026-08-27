@@ -19,6 +19,10 @@ The position, rotation, and scale labels are gizmo mode buttons. The active mode
 
 Enable physics on an object and choose a box, sphere, cylinder, or capsule-style collider. Radius, height, velocity, and damping are available for physics bodies. Enable `Physics colliders` in Display to inspect the actual configured collider shape. Dynamic bodies can be grabbed with the gizmo and dropped again.
 
+## Trigger areas
+
+Use the Scene Tree `+` object adder to add a Box trigger area or Sphere trigger area. Triggers appear as selectable Scene Tree items and can be deleted with the regular scene delete control. Select a trigger to configure its position, size, and enter action. Move its visible area with the standard transform gizmo. Current built-in actions are Switch scene and Play cutscene; each reveals the required target ID field. Adding a trigger enables the Trigger zones display overlay automatically.
+
 ## Animation and cutscenes
 
 Use `+` and choose `Cutscene + spline` to create a linked pair. Select the cutscene in the Scene Tree to edit duration and control points in one inspector section. The Cutscene dropdown chooses which registered cutscene Play, Pause, and Stop control. Enable `Spline editor` to show the curve and its point gizmo.
@@ -31,10 +35,6 @@ Choose a built-in material such as `MeshToonMaterial`, `MeshStandardMaterial`, o
 
 The Scripts section can create, edit, and save JavaScript files. Select an object, choose a script, and attach it. The relationship is stored with the object and emitted as an import and instance in `scene.js`. Select the player object and press the Scene Tree Play button to enter the current basic WASD/arrow playtest. Space is the jump input when the attached physics API is available.
 
-## Menus
-
-Menus are optional. Open `./menu-editor.html` from the editor to edit code-first `menu.js` and `menu.css`. Register a menu with `UIManager` only when a game needs HTML/CSS UI. Scenes without menus are unaffected.
-
 ## Source of truth
 
 Scene JSON is the structured bridge used by the visual editor and persistence. `scene.js` is the primary Three.js authoring surface. `Apply scene.js` parses supported editor constructs into scene state; visual editor and inspector changes regenerate supported `scene.js` output. Custom runtime JavaScript remains normal JavaScript and is not flattened into JSON.
@@ -43,7 +43,7 @@ Scene JSON is the structured bridge used by the visual editor and persistence. `
 
 `Save` stores the virtual explorer files and active scene JSON in IndexedDB. `Load` restores them through the normal scene-apply path. The project manager can create or open a specific browser project; the selected project is carried into the editor by its project URL. The browser storage adapter is separate from the future File System Access and Tauri adapters.
 
-The Project panel groups a conventional Three.js game workspace into Project files (`main.js`), Scenes, Scripts, Shaders, Assets (models and textures), Audio (BGM and SFX), Animations, and Menus. Folder-local actions create scenes, scripts, shader source pairs, and menus. Asset and audio actions open the browser file chooser and store selected files in the active browser project. Click a code file to use the full right-panel Monaco workspace; click the return arrow to resume scene inspection. Files can be deleted from the Project panel. Audio folders organize imported sound files; scene BGM and positional SFX playback are not implemented yet.
+The Project panel groups a conventional Three.js game workspace into Project files (`main.js`), Scenes, Scripts, Shaders, Assets (models and textures), and Audio (BGM and SFX). Folder-local actions create scenes, scripts, and shader source pairs. Asset and audio actions open the browser file chooser and store selected files in the active browser project. Click a code file to use the full right-panel Monaco workspace; click the return arrow to resume scene inspection. Files can be deleted from the Project panel.
 
 ## Release targets
 

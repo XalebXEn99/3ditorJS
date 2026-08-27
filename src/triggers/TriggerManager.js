@@ -14,8 +14,9 @@ export class TriggerManager {
     if (this.triggers.has(triggerJSON.id)) this.unregisterTrigger(triggerJSON.id);
 
     const size = triggerJSON.size || [1, 1, 1];
+    const isSphere = triggerJSON.type === 'sphere';
     const helper = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(...size)),
+      new THREE.EdgesGeometry(isSphere ? new THREE.SphereGeometry(size[0] / 2, 20, 12) : new THREE.BoxGeometry(...size)),
       new THREE.LineBasicMaterial({ color: 0xf2b880 }),
     );
     helper.position.fromArray(triggerJSON.position || [0, 0, 0]);
@@ -37,6 +38,19 @@ export class TriggerManager {
     trigger.helper.geometry.dispose();
     trigger.helper.material.dispose();
     this.triggers.delete(id);
+  }
+
+  updateTrigger(triggerJSON) {
+    const trigger = this.triggers.get(triggerJSON.id);
+    if (!trigger) return this.registerTrigger(triggerJSON);
+    const previousSize = trigger.data.size || [1, 1, 1];
+    const nextSize = triggerJSON.size || [1, 1, 1];
+    const geometryChanged = trigger.data.type !== triggerJSON.type
+      || previousSize.some((value, index) => value !== nextSize[index]);
+    if (geometryChanged) return this.registerTrigger(triggerJSON);
+    trigger.data = structuredClone(triggerJSON);
+    trigger.helper.position.fromArray(triggerJSON.position || [0, 0, 0]);
+    return triggerJSON.id;
   }
 
   clear() {
@@ -82,6 +96,9 @@ export class TriggerManager {
     const triggerPosition = new THREE.Vector3().fromArray(trigger.position || [0, 0, 0]);
     const triggerSize = new THREE.Vector3().fromArray(trigger.size || [1, 1, 1]);
     const actorBox = new THREE.Box3().setFromObject(actor);
+    if (trigger.type === 'sphere') {
+      return actorBox.intersectsSphere(new THREE.Sphere(triggerPosition, triggerSize.x / 2));
+    }
     const triggerBox = new THREE.Box3().setFromCenterAndSize(triggerPosition, triggerSize);
     return triggerBox.intersectsBox(actorBox);
   }

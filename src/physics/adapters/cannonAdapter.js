@@ -133,6 +133,6 @@ export class CannonAdapter {
   onCollision(mesh, callback) {
     const body = this.bodies.get(mesh);
     if (!body) throw new Error('Cannot observe collisions for a mesh without a rigid body.');
-    body.addEventListener('collide', (event) => callback(mesh, event.body));
+    body.addEventListener('collide', (event) => callback(mesh, event.body, event));
   }
 }

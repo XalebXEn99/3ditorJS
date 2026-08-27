@@ -16,7 +16,7 @@ For this repository the public editor address is:
 https://xalebxen99.github.io/3ditorJS/
 ```
 
-The production build uses the repository base path `/3ditorJS/`. Use relative paths such as `./project-manager.html` and `./menu-editor.html` for editor pages. Root-relative paths such as `/project-manager.html` resolve outside the repository site and fail on Pages.
+The production build uses the repository base path `/3ditorJS/`. Use relative paths such as `./project-manager.html` for editor pages. Root-relative paths such as `/project-manager.html` resolve outside the repository site and fail on Pages.
 
 ## Verify the browser build
 

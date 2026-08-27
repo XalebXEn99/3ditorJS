@@ -146,12 +146,37 @@ export function parseSceneCode(source) {
   }
 
   const cutscenes = [];
-  const cutscenePattern = /cutsceneManager\.registerCutscene\(\{\s*id: ([^,]+),\s*duration: ([^,]+),\s*tracks: \[([\s\S]*?)\],\s*\}\);/g;
+  const cutscenePattern = /cutsceneManager\.registerCutscene\(\{\s*id: ([^,]+),\s*(?:name: [^,]+,\s*)?duration: ([^,]+),\s*tracks: \[([\s\S]*?)\],\s*\}\);/g;
   while ((match = cutscenePattern.exec(source))) {
     const [, idSource, durationSource, tracksSource] = match;
     const nameMatch = source.slice(Math.max(0, match.index - 100), match.index).match(/name: ([^,]+),/);
     const tracks = [...tracksSource.matchAll(/\{ target: ([^,]+), type: ([^,]+), path: ([^,]+), start: ([^,]+), end: ([^ ]+) \},/g)].map((track) => ({ target: JSON.parse(track[1]), type: JSON.parse(track[2]), path: JSON.parse(track[3]), start: Number(track[4]), end: Number(track[5]) }));
     cutscenes.push({ id: JSON.parse(idSource), name: nameMatch ? JSON.parse(nameMatch[1]) : JSON.parse(idSource), duration: Number(durationSource), tracks });
+  }
+  for (const eventMatch of source.matchAll(/cutsceneManager\.registerAudioEvent\(([^,]+), (\{[\s\S]*?\})\);/g)) {
+    const cutscene = cutscenes.find((entry) => entry.id === JSON.parse(eventMatch[1]));
+    if (!cutscene) continue;
+    try {
+      cutscene.events = [...(cutscene.events || []), JSON.parse(eventMatch[2])];
+    } catch {
+      throw new Error('Invalid cutscene audio event.');
+    }
+  }
+  let audio = { bgm: null, emitters: [] };
+  const bgmMatch = source.match(/audioManager\.setBgm\((\{[\s\S]*?\})\);/);
+  if (bgmMatch) {
+    try {
+      audio.bgm = JSON.parse(bgmMatch[1]);
+    } catch {
+      throw new Error('Invalid background music configuration.');
+    }
+  }
+  for (const emitterMatch of source.matchAll(/audioManager\.registerEmitter\((\{[\s\S]*?\})\);/g)) {
+    try {
+      audio.emitters.push(JSON.parse(emitterMatch[1]));
+    } catch {
+      throw new Error('Invalid audio emitter configuration.');
+    }
   }
   return {
     version: SCENE_SCHEMA_VERSION,
@@ -164,5 +189,6 @@ export function parseSceneCode(source) {
     triggers,
     splines,
     cutscenes,
+    audio,
   };
 }

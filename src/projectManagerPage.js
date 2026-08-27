@@ -1,6 +1,7 @@
 import './projectManagerPage.css';
 import { IndexedDbProjectStorage } from './project/IndexedDbProjectStorage.js';
 import { createDefaultScene } from './scene/sceneSchema.js';
+import { generateSceneCode } from './scene/sceneCodeGenerator.js';
 
 const storage = new IndexedDbProjectStorage();
 const nameInput = document.querySelector('#project-name');
@@ -38,8 +39,15 @@ async function createProject() {
   }
   const project = await storage.createProject(name);
   await storage.saveFile(project.id, 'project.json', JSON.stringify({ name, version: 1 }, null, 2));
-  await storage.saveFile(project.id, 'scenes/test-foundation.scene.json', JSON.stringify(createDefaultScene(), null, 2));
-  await storage.saveFile(project.id, 'scenes/main.scene.js', `import * as THREE from 'three';\n\nexport function createScene() {\n  const scene = new THREE.Scene();\n  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);\n  scene.add(camera);\n  return { scene, camera };\n}\n`);
+  await storage.saveFile(project.id, 'main.js', `import { createScene } from './scenes/main.scene.js';
+
+const { scene, camera } = createScene();
+
+export { scene, camera };
+`);
+  const scene = createDefaultScene();
+  await storage.saveFile(project.id, 'scenes/main.scene.json', JSON.stringify(scene, null, 2));
+  await storage.saveFile(project.id, 'scenes/main.scene.js', generateSceneCode(scene));
   window.location.href = `./?project=${encodeURIComponent(project.id)}`;
 }
 

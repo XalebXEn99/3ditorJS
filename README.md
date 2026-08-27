@@ -14,11 +14,9 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. The foundation scene should display a lit, orbitable cube on a grid.
+Open the local URL printed by Vite. A new project starts with an empty Main Scene, neutral lighting, an editor camera, and a grid.
 
-The editor currently supports scene JSON, generated Three.js scene code, Cannon-es physics, trigger zones, spline cutscenes, Monaco JavaScript/GLSL editors, material and shader authoring, scene cameras, script attachments, scene-tree editing, and browser project persistence.
-
-Menus are optional game UI overlays. Register a menu with `UIManager` only when a game needs one; scenes without a registered menu are unaffected.
+The editor currently supports scene JSON, generated Three.js scene code, Cannon-es physics, trigger zones, spline cutscenes, audio emitters and BGM, Monaco JavaScript/GLSL editors, material and shader authoring, scene cameras, script attachments, scene-tree editing, and browser project persistence.
 
 ## Documentation
 

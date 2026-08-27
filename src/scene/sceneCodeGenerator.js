@@ -19,7 +19,7 @@ export function generateSceneCode(sceneJSON) {
       ? ["import { CutsceneManager } from './animation/CutsceneManager.js';"]
       : []),
     '',
-    'export function createScene({ sceneManager = null } = {}) {',
+    'export function createScene({ sceneManager = null, audioManager = null } = {}) {',
     '  const scene = new THREE.Scene();',
     `  scene.name = ${JSON.stringify(sceneJSON.metadata?.name || sceneJSON.id)};`,
     '',
@@ -114,7 +114,7 @@ export function generateSceneCode(sceneJSON) {
     lines.push(`  scene.add(${variableName});`);
     for (const script of objectJSON.scripts || []) {
       const scriptVariable = `${variableName}_${script.export}`;
-      lines.push(`  const ${scriptVariable} = new ${script.export}({ mesh: ${variableName}, physics: physicsWorld, camera });`);
+      lines.push(`  const ${scriptVariable} = new ${script.export}({ mesh: ${variableName}, physics: physicsWorld, camera, audioManager });`);
       lines.push(`  ${variableName}.userData.scripts = ${variableName}.userData.scripts || [];`);
       lines.push(`  ${variableName}.userData.scripts.push(${scriptVariable});`);
     }
@@ -170,6 +170,9 @@ export function generateSceneCode(sceneJSON) {
         lines.push(`      { target: ${JSON.stringify(track.target)}, type: ${JSON.stringify(track.type)}, path: ${JSON.stringify(track.path)}, start: ${track.start ?? 0}, end: ${track.end ?? cutscene.duration ?? 0} },`);
       }
       lines.push('    ],', '  });');
+      for (const event of cutscene.events || []) {
+        if (event.type === 'audio') lines.push(`  if (audioManager) cutsceneManager.registerAudioEvent(${JSON.stringify(cutscene.id)}, ${JSON.stringify(event)});`);
+      }
     }
     lines.push('');
   }
@@ -187,6 +190,10 @@ export function generateSceneCode(sceneJSON) {
     '  // triggerManager.registerTrigger({ id: \'example\', type: \'box\', position: [0, 1, 0], size: [3, 2, 3], action: \'onPlayerEnter\' });',
     '',
   );
+  const sceneAudio = sceneJSON.audio || { bgm: null, emitters: [] };
+  if (sceneAudio.bgm?.path) lines.push(`  if (audioManager) audioManager.setBgm(${JSON.stringify(sceneAudio.bgm)});`);
+  for (const emitter of sceneAudio.emitters || []) lines.push(`  if (audioManager) audioManager.registerEmitter(${JSON.stringify(emitter)});`);
+  if (sceneAudio.bgm?.path || sceneAudio.emitters?.length) lines.push('');
   lines.push(
     `  return { scene, camera, physicsWorld, updatePhysics, triggerManager, switchSceneWithFade${(sceneJSON.splines || []).length || (sceneJSON.cutscenes || []).length ? ', cutsceneManager' : ''} };`,
     '}',
