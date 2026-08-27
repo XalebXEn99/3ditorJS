@@ -5,7 +5,7 @@ export class ScriptManager {
   }
 
   listScripts() {
-    return this.projectManager.listFiles().filter((file) => file.type === 'javascript');
+    return this.projectManager.listFiles().filter((file) => file.type === 'javascript' && file.path.startsWith('scripts/'));
   }
 
   createScript(name = 'new-script') {

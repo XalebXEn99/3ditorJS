@@ -595,14 +595,20 @@ function showFileWorkspace(file) {
 returnToScene.addEventListener('click', showSceneWorkspace);
 saveFileWorkspace.addEventListener('click', async () => {
   if (!activeProjectFile) return;
-  activeProjectFile.content = fileEditor.getValue();
   try {
-    if (projectManager.storage && projectManager.projectId) await projectManager.saveProjectFile(activeProjectFile.path, activeProjectFile.content);
-    projectStatus.textContent = `Saved ${activeProjectFile.path}`;
+    await saveProjectSource(activeProjectFile, fileEditor.getValue());
   } catch (error) {
     projectStatus.textContent = error.message;
   }
 });
+
+async function saveProjectSource(file, content) {
+  file.content = content;
+  if (activeProjectFile?.path === file.path && fileEditor.getValue() !== content) fileEditor.setValue(content);
+  if (scriptSelect.value === file.path && scriptEditor.getValue() !== content) scriptEditor.setValue(content);
+  if (projectManager.storage && projectManager.projectId) await projectManager.saveProjectFile(file.path, content);
+  projectStatus.textContent = `Saved ${file.path}`;
+}
 
 function populateScripts() {
   const current = scriptSelect.value;
@@ -625,11 +631,14 @@ function editSelectedScript() {
   scriptEditor.layout();
 }
 
-function saveSelectedScript() {
+async function saveSelectedScript() {
   const file = scriptManager.listScripts().find((entry) => entry.path === scriptSelect.value);
   if (!file) return;
-  file.content = scriptEditor.getValue();
-  projectStatus.textContent = `Saved ${file.path}`;
+  try {
+    await saveProjectSource(file, scriptEditor.getValue());
+  } catch (error) {
+    projectStatus.textContent = error.message;
+  }
 }
 
 function playSelectedCharacter() {
