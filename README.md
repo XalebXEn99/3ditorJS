@@ -53,6 +53,8 @@ npm run tauri:build
 
 The Tauri commands require the Rust toolchain and platform build prerequisites. Windows artifacts can be built on Windows; Linux AppImage artifacts should be built on Linux or in a Linux GitHub Actions runner.
 
+GitHub Pages must be configured to use **GitHub Actions** as its deployment source. The Pages workflow deploys the `dist` artifact from `main` and uses the repository base path `/3ditorJS/`.
+
 ## Scene authoring contract
 
 `scene.js` is the primary authoring document. The visual editor and inspector are convenience tools for editor-managed scene constructs, while Scene JSON is the structured persistence and inspection projection.
