@@ -41,7 +41,7 @@ Scene JSON is the structured bridge used by the visual editor and persistence. `
 
 ## Browser project storage
 
-`Save` stores the virtual explorer files and active scene JSON in IndexedDB. `Load` restores them through the normal scene-apply path. The browser storage adapter is separate from the future File System Access and Tauri adapters.
+`Save` stores the virtual explorer files and active scene JSON in IndexedDB. `Load` restores them through the normal scene-apply path. The project manager can create or open a specific browser project; the selected project is carried into the editor by its project URL. The browser storage adapter is separate from the future File System Access and Tauri adapters.
 
 ## Release targets
 

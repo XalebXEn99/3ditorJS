@@ -111,10 +111,12 @@ export class ProjectManager {
     this.onOpen?.(file);
   }
 
-  async connectStorage(storage, projectName = 'Untitled Project') {
+  async connectStorage(storage, projectName = 'Untitled Project', projectId = null) {
     this.storage = storage;
     const projects = await storage.listProjects();
-    const project = projects[0] || await storage.createProject(projectName);
+    const project = projectId
+      ? await storage.openProject(projectId)
+      : projects[0] || await storage.createProject(projectName);
     this.projectId = project.id;
     for (const [path, content] of Object.entries(project.files || {})) {
       const existing = this.files.get(path);

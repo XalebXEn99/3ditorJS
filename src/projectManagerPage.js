@@ -1,5 +1,6 @@
 import './projectManagerPage.css';
 import { IndexedDbProjectStorage } from './project/IndexedDbProjectStorage.js';
+import { createDefaultScene } from './scene/sceneSchema.js';
 
 const storage = new IndexedDbProjectStorage();
 const nameInput = document.querySelector('#project-name');
@@ -23,7 +24,7 @@ async function renderProjects() {
     item.querySelector('strong').textContent = project.name;
     item.querySelector('span').textContent = project.location || 'Browser storage';
     item.querySelector('button').addEventListener('click', () => {
-      window.location.href = '/';
+      window.location.href = `./?project=${encodeURIComponent(project.id)}`;
     });
     recentProjects.append(item);
   }
@@ -37,9 +38,9 @@ async function createProject() {
   }
   const project = await storage.createProject(name);
   await storage.saveFile(project.id, 'project.json', JSON.stringify({ name, version: 1 }, null, 2));
+  await storage.saveFile(project.id, 'scenes/test-foundation.scene.json', JSON.stringify(createDefaultScene(), null, 2));
   await storage.saveFile(project.id, 'scenes/main.scene.js', `import * as THREE from 'three';\n\nexport function createScene() {\n  const scene = new THREE.Scene();\n  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);\n  scene.add(camera);\n  return { scene, camera };\n}\n`);
-  status.textContent = `${name} created in browser storage.`;
-  await renderProjects();
+  window.location.href = `./?project=${encodeURIComponent(project.id)}`;
 }
 
 async function openFolder() {

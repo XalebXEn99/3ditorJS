@@ -189,7 +189,7 @@ sequenceDiagram
 ## Current limits and planned work
 
 - The code parser intentionally supports only editor-generated constructs, not arbitrary JavaScript.
-- IndexedDB is the working project persistence backend. Exact selected-project opening in the project-manager page needs completion.
+- IndexedDB is the working project persistence backend. The project manager opens a selected browser project by passing its project ID to the editor URL.
 - File System Access and Tauri filesystem adapters are planned behind `ProjectStorage`.
 - Player scripts are scaffolded and attachable; general user-script lifecycle execution remains incomplete.
 - Shader files, uniform controls, persistence, and preview diagnostics need further strengthening.

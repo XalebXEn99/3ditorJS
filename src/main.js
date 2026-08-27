@@ -96,6 +96,7 @@ const projectManager = new ProjectManager({
   },
 });
 const projectStorage = new IndexedDbProjectStorage();
+const activeProjectId = new URLSearchParams(window.location.search).get('project');
 const scriptManager = new ScriptManager(projectManager);
 let playMode = false;
 let playTarget = null;
@@ -618,7 +619,7 @@ function applyCode() {
 
 async function saveProject() {
   try {
-    await projectManager.connectStorage(projectStorage);
+    await projectManager.connectStorage(projectStorage, 'Untitled Project', activeProjectId);
     await projectManager.saveProjectFile('scenes/test-foundation.scene.json', jsonEditor.getValue());
     await projectManager.saveAllFiles();
     projectStatus.textContent = 'Project saved in browser storage';
@@ -629,7 +630,7 @@ async function saveProject() {
 
 async function loadProject() {
   try {
-    await projectManager.connectStorage(projectStorage);
+    await projectManager.connectStorage(projectStorage, 'Untitled Project', activeProjectId);
     const content = await projectManager.loadProjectFile('scenes/test-foundation.scene.json');
     if (!content) {
       projectStatus.textContent = 'No saved scene found';
@@ -1609,3 +1610,22 @@ selectObject('cube-01');
 renderJSON();
 resizeRenderer();
 animate();
+
+async function openRequestedProject() {
+  if (!activeProjectId) return;
+  try {
+    const project = await projectManager.connectStorage(projectStorage, 'Untitled Project', activeProjectId);
+    const content = await projectManager.loadProjectFile('scenes/test-foundation.scene.json');
+    if (content) {
+      jsonEditor.setValue(content);
+      applyJSON();
+    }
+    populateScripts();
+    renderProjectTree();
+    projectStatus.textContent = `Opened ${project.name}`;
+  } catch (error) {
+    projectStatus.textContent = error.message;
+  }
+}
+
+openRequestedProject();
