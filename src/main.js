@@ -117,6 +117,7 @@ let playTarget = null;
 let scriptEditor = null;
 let fileEditor = null;
 let activeProjectFile = null;
+const projectFileModels = new Map();
 
 function renderProjectTree() {
   projectTree.replaceChildren();
@@ -126,7 +127,7 @@ function renderProjectTree() {
     const folder = parts.length > 1 ? parts[0] : 'project';
     const name = parts.length > 1 ? parts.slice(1).join('/') : file.path;
     if (!folders.has(folder)) folders.set(folder, []);
-    folders.get(folder).push({ ...file, name });
+    folders.get(folder).push({ file, name });
   }
   const folderOrder = ['project', 'scenes', 'scripts', 'shaders', 'assets', 'audio', 'animations', 'menus'];
   for (const folder of folderOrder) {
@@ -135,13 +136,13 @@ function renderProjectTree() {
     folderLabel.className = 'project-folder';
     folderLabel.textContent = restName(folder);
     projectTree.append(folderLabel);
-    files.forEach((file) => {
+    files.forEach(({ file, name }) => {
       const row = document.createElement('div');
       row.className = 'project-file-row';
       const button = document.createElement('button');
       button.className = 'project-file';
       button.type = 'button';
-      button.textContent = file.name;
+      button.textContent = name;
       button.title = file.path;
       button.addEventListener('click', () => projectManager.open(file));
       const deleteButton = document.createElement('button');
@@ -586,8 +587,16 @@ function showFileWorkspace(file) {
   fileDetailView.hidden = isCodeFile;
   saveFileWorkspace.hidden = !isCodeFile;
   if (isCodeFile) {
-    fileEditor.setModelLanguage(fileEditor.getModel(), file.type === 'shader' ? 'cpp' : file.path.endsWith('.md') ? 'markdown' : 'javascript');
-    fileEditor.setValue(file.content || '');
+    const language = file.type === 'shader' ? 'cpp' : file.path.endsWith('.md') ? 'markdown' : 'javascript';
+    let model = projectFileModels.get(file.path);
+    if (!model) {
+      model = monaco.editor.createModel(file.content || '', language, monaco.Uri.parse(`inmemory://3ditorjs/${file.path}`));
+      projectFileModels.set(file.path, model);
+    } else {
+      model.setValue(file.content || '');
+      monaco.editor.setModelLanguage(model, language);
+    }
+    fileEditor.setModel(model);
     requestAnimationFrame(() => fileEditor.layout());
     return;
   }
@@ -607,7 +616,8 @@ saveFileWorkspace.addEventListener('click', async () => {
 
 async function saveProjectSource(file, content) {
   file.content = content;
-  if (activeProjectFile?.path === file.path && fileEditor.getValue() !== content) fileEditor.setValue(content);
+  const model = projectFileModels.get(file.path);
+  if (model && model.getValue() !== content) model.setValue(content);
   if (scriptSelect.value === file.path && scriptEditor.getValue() !== content) scriptEditor.setValue(content);
   if (projectManager.storage && projectManager.projectId) await projectManager.saveProjectFile(file.path, content);
   projectStatus.textContent = `Saved ${file.path}`;
