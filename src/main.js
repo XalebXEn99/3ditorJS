@@ -93,7 +93,10 @@ const sceneCameras = new Map();
 const gltfLoader = new GLTFLoader();
 
 const projectManager = new ProjectManager({
-  onChange: renderProjectTree,
+  onChange: () => {
+    renderProjectTree();
+    populateScripts();
+  },
   onOpen: (file) => {
     projectStatus.textContent = `Opened ${file.path}`;
     if (file.type === 'scene') {
