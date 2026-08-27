@@ -1,6 +1,6 @@
 # 3ditor JS
 
-A browser-first Three.js editor foundation. The browser build is the canonical target before desktop packaging.
+A browser-first Three.js editor and project maker. The shared editor core targets the browser first and is also prepared for a Tauri desktop shell.
 
 ## Requirements
 
@@ -16,9 +16,42 @@ npm run dev
 
 Open the local URL printed by Vite. The foundation scene should display a lit, orbitable cube on a grid.
 
-The editor currently supports scene JSON, generated Three.js scene code, Cannon-es physics, trigger zones, and the initial animation manager API.
+The editor currently supports scene JSON, generated Three.js scene code, Cannon-es physics, trigger zones, spline cutscenes, Monaco JavaScript/GLSL editors, material and shader authoring, scene cameras, script attachments, scene-tree editing, and browser project persistence.
 
 Menus are optional game UI overlays. Register a menu with `UIManager` only when a game needs one; scenes without a registered menu are unaffected.
+
+## Documentation
+
+The complete workflow is in [docs/HOW_TO_USE.md](docs/HOW_TO_USE.md).
+
+## Architecture
+
+```text
+Visual editor / inspector / gizmos
+		  |
+		  v
+	 Canonical scene state
+	    /          \
+	   v            v
+   Scene JSON      scene.js
+			     |
+			     v
+		     Three.js runtime
+```
+
+Three.js remains the rendering and scene foundation. Physics, triggers, cutscenes, UI, scripts, and project management are editor/runtime conveniences built around it.
+
+## Deployment
+
+The browser build is static and can be deployed to GitHub Pages by the included GitHub Actions workflow. Vite uses `/3ditorJS/` as its Pages base path in Actions builds. Tauri uses the same `dist` output for native desktop packaging and will eventually provide the native filesystem adapter.
+
+```bash
+npm run build
+npm run tauri:dev
+npm run tauri:build
+```
+
+The Tauri commands require the Rust toolchain and platform build prerequisites. Windows artifacts can be built on Windows; Linux AppImage artifacts should be built on Linux or in a Linux GitHub Actions runner.
 
 ## Scene authoring contract
 

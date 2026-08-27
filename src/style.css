@@ -184,6 +184,22 @@ body {
   gap: 5px;
 }
 
+.project-manager-link {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(145, 196, 131, 0.42);
+  color: #b9d7b0;
+  text-decoration: none;
+}
+
+.project-manager-link:hover,
+.project-manager-link:focus-visible {
+  background: rgba(145, 196, 131, 0.14);
+  outline: none;
+}
+
 .panel-collapse {
   width: 28px;
   height: 28px;

@@ -116,12 +116,23 @@ export class ProjectManager {
     const projects = await storage.listProjects();
     const project = projects[0] || await storage.createProject(projectName);
     this.projectId = project.id;
+    for (const [path, content] of Object.entries(project.files || {})) {
+      const existing = this.files.get(path);
+      this.files.set(path, { ...(existing || { path, type: path.endsWith('.scene.js') ? 'scene' : 'javascript' }), content });
+    }
     return project;
   }
 
   async saveProjectFile(path, content) {
     if (!this.storage || !this.projectId) throw new Error('Project storage is not connected.');
     await this.storage.saveFile(this.projectId, path, content);
+  }
+
+  async saveAllFiles() {
+    if (!this.storage || !this.projectId) throw new Error('Project storage is not connected.');
+    for (const file of this.files.values()) {
+      await this.storage.saveFile(this.projectId, file.path, file.content || '');
+    }
   }
 
   async loadProjectFile(path) {

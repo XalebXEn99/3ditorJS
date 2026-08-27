@@ -620,6 +620,7 @@ async function saveProject() {
   try {
     await projectManager.connectStorage(projectStorage);
     await projectManager.saveProjectFile('scenes/test-foundation.scene.json', jsonEditor.getValue());
+    await projectManager.saveAllFiles();
     projectStatus.textContent = 'Project saved in browser storage';
   } catch (error) {
     projectStatus.textContent = error.message;
@@ -637,6 +638,7 @@ async function loadProject() {
     jsonEditor.setValue(content);
     applyJSON();
     projectStatus.textContent = 'Project loaded from browser storage';
+    renderProjectTree();
   } catch (error) {
     projectStatus.textContent = error.message;
   }
