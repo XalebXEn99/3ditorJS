@@ -22,7 +22,7 @@ Menus are optional game UI overlays. Register a menu with `UIManager` only when 
 
 ## Documentation
 
-The complete workflow is in [docs/HOW_TO_USE.md](docs/HOW_TO_USE.md).
+Start with [docs/HOW_TO_USE.md](docs/HOW_TO_USE.md) for editor workflows, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the complete system reference and 4+1 diagrams, and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Pages and desktop releases.
 
 ## Architecture
 
