@@ -1,5 +1,7 @@
 # 3ditorJS How To Use
 
+For a complete list of every feature and control, see [CONTROLS.md](CONTROLS.md).
+
 ## Run the browser editor
 
 ```bash
@@ -7,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL. The editor uses Three.js for the viewport, Monaco for code, Cannon-es for physics, and browser storage for the current project persistence slice.
+Open the Vite URL. The editor uses Three.js for the viewport, Monaco for code, and Cannon-es for physics. Everything you build lives in one in-memory scene for the current browser session; use **Download scene** to save your work as a zip.
 
 ## Scene authoring
 
@@ -17,11 +19,13 @@ The position, rotation, and scale labels are gizmo mode buttons. The active mode
 
 ## Physics
 
-Enable physics on an object and choose a box, sphere, cylinder, or capsule-style collider. Radius, height, velocity, and damping are available for physics bodies. Enable `Physics colliders` in Display to inspect the actual configured collider shape. Dynamic bodies can be grabbed with the gizmo and dropped again.
+Enable physics on an object and choose `auto` (default, derived from the mesh's real geometry) or a specific box, sphere, cylinder, or capsule-style collider. Radius, height, velocity, and damping are available for physics bodies. Enabling physics defaults mass to `1`.
+
+Enable `Physics colliders` in Display to inspect and directly edit the actual collider shapes: with the toggle on, clicking a collider in the viewport selects it (instead of the mesh) and attaches the gizmo to it, letting you translate its position and scale its size/radius/height independently of the mesh. Right-click a physics-enabled object (or one of its colliders) for an "Add collider" option to build a compound shape out of multiple independent colliders, each separately selectable and gizmo-editable from the "Colliders on this object" list; a "Remove this collider" option deletes extra colliders. Click "Select mesh instead" to return to the regular object inspector. Dynamic bodies can be grabbed with the gizmo and dropped again.
 
 ## Trigger areas
 
-Use the Scene Tree `+` object adder to add a Box trigger area or Sphere trigger area. Triggers appear as selectable Scene Tree items and can be deleted with the regular scene delete control. Select a trigger to configure its position, size, and enter action. Move its visible area with the standard transform gizmo. Current built-in actions are Switch scene and Play cutscene; each reveals the required target ID field. Adding a trigger enables the Trigger zones display overlay automatically.
+Use the Scene Tree `+` object adder to add a Box trigger area or Sphere trigger area. Triggers appear as selectable Scene Tree items and can be deleted with the regular scene delete control. Select a trigger to configure its position, size, and enter action. Move its visible area with the standard transform gizmo. Current built-in actions are Play cutscene and Play sound effect; each reveals the required target ID field. Adding a trigger enables the Trigger zones display overlay automatically.
 
 ## Animation and cutscenes
 
@@ -37,14 +41,16 @@ The Scripts section can create, edit, and save JavaScript files. Select an objec
 
 ## Source of truth
 
-Scene JSON is the structured bridge used by the visual editor and persistence. `scene.js` is the primary Three.js authoring surface. `Apply scene.js` parses supported editor constructs into scene state; visual editor and inspector changes regenerate supported `scene.js` output. Custom runtime JavaScript remains normal JavaScript and is not flattened into JSON.
+Scene JSON is the structured bridge used by the visual editor and export. `scene.js` is the primary Three.js authoring surface. `Apply scene.js` parses supported editor constructs into scene state; visual editor and inspector changes regenerate supported `scene.js` output. Custom runtime JavaScript remains normal JavaScript and is not flattened into JSON.
 
-## Browser project storage
+## Uploading audio
 
-`Save` stores the virtual explorer files and active scene JSON in IndexedDB. `Load` restores them through the normal scene-apply path. The project manager can create or open a specific browser project; the selected project is carried into the editor by its project URL. The browser storage adapter is separate from the future File System Access and Tauri adapters.
+Use **Upload BGM / SFX** in the Scene audio panel to bring local audio files into the current session. Choose Cancel in the prompt to upload sound effects, or OK to upload background music candidates. Uploaded files are only held in memory for this session and are included in the exported zip when referenced by the scene.
 
-The Project panel groups a conventional Three.js game workspace into Project files (`main.js`), Scenes, Scripts, Shaders, Assets (models and textures), and Audio (BGM and SFX). Folder-local actions create scenes, scripts, and shader source pairs. Asset and audio actions open the browser file chooser and store selected files in the active browser project. Click a code file to use the full right-panel Monaco workspace; click the return arrow to resume scene inspection. Files can be deleted from the Project panel.
+## Exporting your scene
+
+Press **Download scene** in the top bar. This bundles `scene.js`, the trigger/cutscene/audio helper modules it depends on, any scripts and shaders you authored, and any audio you imported, into a single zip. Unzip it into an existing Three.js project folder and import `scene.js` as a normal ES module — no editor runtime is required to use the exported scene.
 
 ## Release targets
 
-GitHub Pages serves the Vite browser build. Tauri uses the same `dist` output for desktop builds. The shared editor code must not call Tauri APIs directly; platform-specific behavior belongs behind storage adapters. Deployment setup and release procedures are in [DEPLOYMENT.md](DEPLOYMENT.md).
+GitHub Pages serves the Vite browser build. See [DEPLOYMENT.md](DEPLOYMENT.md) for setup and release procedures.

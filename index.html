@@ -11,9 +11,10 @@
       <div class="scene-status">
         <span class="status-dot" aria-hidden="true"></span>
         <span>Scene editor</span>
+        <button id="download-scene" class="scene-status-action" type="button">Download scene</button>
+        <p id="editor-status" class="editor-status" role="status"></p>
       </div>
       <div id="scene-container"></div>
-      <div id="scene-transition" class="scene-transition" aria-hidden="true"></div>
       <div id="object-modal" class="object-modal" hidden>
         <div class="object-modal-card" role="dialog" aria-modal="true" aria-labelledby="object-modal-title">
           <div class="object-modal-header">
@@ -36,44 +37,16 @@
             <button type="button" data-add-type="box-trigger">Box trigger area</button>
             <button type="button" data-add-type="sphere-trigger">Sphere trigger area</button>
             <button type="button" data-add-type="audio-emitter">Audio emitter</button>
-            <label class="import-object-button">Import GLTF / GLB<input id="import-object-file" type="file" accept=".gltf,.glb"></label>
+            <label class="import-object-button">Upload GLTF / GLB<input id="import-object-file" type="file" accept=".gltf,.glb"></label>
           </div>
           <p id="object-modal-status" class="modal-status" role="status"></p>
         </div>
       </div>
-      <aside class="project-panel" aria-label="Project explorer">
-        <button id="project-collapse" class="panel-collapse" type="button" aria-label="Collapse project explorer" title="Collapse project explorer">‹</button>
-        <button id="project-resize-handle" class="project-resize-handle" type="button" aria-label="Resize project explorer" title="Resize project explorer">
-          <span aria-hidden="true"></span>
-        </button>
-        <div class="project-header">
-          <p class="panel-kicker">Project</p>
-          <div class="project-header-actions">
-            <a class="project-manager-link" href="./project-manager.html" aria-label="Open project manager" title="Open project manager">⌂</a>
-            <button id="project-save" class="project-file-action" type="button" aria-label="Save project" title="Save project"><span aria-hidden="true">⇩</span></button>
-            <button id="project-load" class="project-file-action" type="button" aria-label="Load project" title="Load project"><span aria-hidden="true">⇧</span></button>
-          </div>
-        </div>
-        <div id="project-tree" class="project-tree"></div>
-        <p id="project-status" class="project-status" role="status"></p>
-      </aside>
       <aside class="editor-panel" aria-label="Scene inspector">
         <button id="panel-resize-handle" class="panel-resize-handle" type="button" aria-label="Resize inspector panel" title="Resize inspector panel">
           <span aria-hidden="true"></span>
         </button>
         <button id="panel-collapse" class="panel-collapse inspector-collapse" type="button" aria-label="Collapse inspector" title="Collapse inspector">›</button>
-        <section id="file-workspace" class="file-workspace" hidden aria-label="Project file workspace">
-          <div class="file-workspace-header">
-            <div>
-              <p class="panel-kicker">Project file</p>
-              <h2 id="file-workspace-title">File</h2>
-            </div>
-            <button id="return-to-scene" class="file-workspace-return" type="button" aria-label="Return to scene inspector" title="Return to scene inspector">←</button>
-          </div>
-          <div id="file-editor-host" class="monaco-editor-host file-editor-host" aria-label="Project file editor"></div>
-          <div id="file-detail-view" class="file-detail-view" hidden></div>
-          <button id="save-file-workspace" class="apply-button" type="button">Save file</button>
-        </section>
         <section class="panel-section">
           <div class="scene-tree-header">
             <p class="panel-kicker">Scene Tree</p>
@@ -103,6 +76,11 @@
             <p class="panel-kicker">Scripts</p>
             <button id="create-script" class="section-action script-add-button" type="button" aria-label="Create new script" title="Create new script">+</button>
           </div>
+          <div id="new-script-form" class="new-script-form" hidden>
+            <input id="new-script-name" class="new-script-name" type="text" placeholder="script-name" aria-label="New script name">
+            <button id="confirm-new-script" class="cutscene-button" type="button">Create</button>
+            <button id="cancel-new-script" class="cutscene-button" type="button">Cancel</button>
+          </div>
           <select id="script-select" class="cutscene-select" aria-label="Select script"></select>
           <button id="edit-script" class="cutscene-button" type="button">Edit script</button>
           <div id="script-attachment-fields" class="script-attachment-fields"></div>
@@ -113,6 +91,10 @@
         </section>
         <section class="panel-section">
           <p class="panel-kicker">Scene audio</p>
+          <div class="cutscene-buttons">
+            <button id="upload-bgm-file" class="cutscene-button" type="button">Upload BGM</button>
+            <button id="upload-sfx-file" class="cutscene-button" type="button">Upload SFX</button>
+          </div>
           <label class="property-row"><span>Background music</span><select id="bgm-select" aria-label="Background music"></select></label>
           <label class="property-row"><span>Volume</span><input id="bgm-volume" type="number" min="0" max="1" step="0.05" value="0.7"></label>
           <label class="display-toggle"><input id="bgm-loop" type="checkbox" checked><span>Loop background music</span></label>

@@ -1,23 +1,26 @@
 import * as CANNON from 'cannon-es';
 
-const shapesFor = (options) => {
+const shapesFor = (options, scale = [1, 1, 1]) => {
+  const radialScale = (scale[0] + scale[2]) / 2;
   if (options.collider === 'sphere') {
-    return [{ shape: new CANNON.Sphere(options.radius ?? 0.5) }];
+    const radius = (options.radius ?? 0.5) * ((scale[0] + scale[1] + scale[2]) / 3);
+    return [{ shape: new CANNON.Sphere(radius) }];
   }
   if (options.collider === 'cylinder') {
-    const radius = options.radius ?? 0.5;
-    return [{ shape: new CANNON.Cylinder(radius, radius, options.height ?? 1, options.segments ?? 8) }];
+    const radius = (options.radius ?? 0.5) * radialScale;
+    const height = (options.height ?? 1) * scale[1];
+    return [{ shape: new CANNON.Cylinder(radius, radius, height, options.segments ?? 8) }];
   }
   if (options.collider === 'capsule') {
-    const radius = options.radius ?? 0.5;
-    const height = options.height ?? 1;
+    const radius = (options.radius ?? 0.5) * radialScale;
+    const height = (options.height ?? 1) * scale[1];
     return [
       { shape: new CANNON.Cylinder(radius, radius, height, options.segments ?? 8) },
       { shape: new CANNON.Sphere(radius), offset: new CANNON.Vec3(0, height / 2, 0) },
       { shape: new CANNON.Sphere(radius), offset: new CANNON.Vec3(0, -height / 2, 0) },
     ];
   }
-  const size = options.size ?? [1, 1, 1];
+  const size = (options.size ?? [1, 1, 1]).map((value, index) => value * (scale[index] ?? 1));
   return [{ shape: new CANNON.Box(new CANNON.Vec3(size[0] / 2, size[1] / 2, size[2] / 2)) }];
 };
 
@@ -35,7 +38,19 @@ export class CannonAdapter {
       linearDamping: options.linearDamping ?? 0.01,
       angularDamping: options.angularDamping ?? 0.01,
     });
-    for (const { shape, offset } of shapesFor(options)) body.addShape(shape, offset);
+    const scale = mesh.scale.toArray();
+    for (const { shape, offset } of shapesFor(options, scale)) body.addShape(shape, offset);
+    for (const extra of options.extraColliders || []) {
+      const localOffset = extra.position || [0, 0, 0];
+      for (const { shape, offset } of shapesFor(extra, scale)) {
+        const combined = new CANNON.Vec3(
+          localOffset[0] * scale[0] + (offset?.x || 0),
+          localOffset[1] * scale[1] + (offset?.y || 0),
+          localOffset[2] * scale[2] + (offset?.z || 0),
+        );
+        body.addShape(shape, combined);
+      }
+    }
     body.velocity.set(...(options.velocity || [0, 0, 0]));
     const rotation = options.rotation || mesh.rotation.toArray();
     body.quaternion.setFromEuler(...rotation);

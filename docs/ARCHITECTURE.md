@@ -2,14 +2,11 @@
 
 ## Purpose and boundaries
 
-3ditorJS is a browser-first Three.js scene editor. It combines a WebGL visual editor with code and JSON authoring tools, then packages the same frontend into a Tauri desktop shell. Modern ES modules and plain JavaScript are used throughout the editor core.
+3ditorJS is a browser-based Three.js scene and cutscene creator. It combines a WebGL visual editor with code and JSON authoring tools for a single in-memory scene, then exports that scene as a downloadable zip (`scene.js` plus its helper modules, scripts, shaders, and audio) for use in a regular Three.js project.
 
-The product has three entry pages:
+The product has a single entry page: `index.html`, the main scene editor.
 
-- `index.html`: the main scene editor.
-- `project-manager.html`: the browser project manager.
-
-Three.js is the rendering and scene foundation. Cannon-es physics, trigger zones, cutscenes, UI menus, scripts, and project persistence are adjacent services. They do not replace the Three.js scene model.
+Three.js is the rendering and scene foundation. Cannon-es physics, trigger zones, cutscenes, scripts, and audio are adjacent services. They do not replace the Three.js scene model.
 
 ## Authoring model
 
@@ -37,12 +34,11 @@ flowchart LR
   Services --> Physics[CannonAdapter]
   Services --> Triggers[TriggerManager]
   Services --> Animation[Animation and cutscene services]
-  Services --> Projects[Project and script services]
-  Projects --> Storage[ProjectStorage]
-  Storage --> IndexedDB[IndexedDbProjectStorage]
+  Services --> Assets[SceneAssets in-memory registry]
+  Assets --> Export[Scene zip export]
 ```
 
-`src/main.js` is the composition root. It creates the Three.js scene, renderer, camera and controls, wires UI events, and coordinates all services. `SceneManager` owns managed objects, canonical scene state, scene registration, and undo/redo history. The browser uses `IndexedDbProjectStorage`; File System Access and Tauri storage adapters are planned but not implemented.
+`src/main.js` is the composition root. It creates the Three.js scene, renderer, camera and controls, wires UI events, and coordinates all services. `SceneManager` owns the managed objects, canonical scene state, and undo/redo history for the single active scene. `SceneAssets` is an in-memory registry (no persistence) for scripts, shaders, and imported audio tied to the current editing session; it feeds the zip export.
 
 ### 2. Development view
 
@@ -51,28 +47,29 @@ This view maps the source modules and page entry points.
 ```mermaid
 flowchart TB
   Pages[index.html] --> Main[src/main.js]
-  ProjectPage[project-manager.html] --> ProjectRuntime[src/projectManagerPage.js]
   Main --> Scene[src/scene]
   Main --> Physics[src/physics]
   Main --> Animation[src/animation]
   Main --> Triggers[src/triggers]
-  Main --> Project[src/project]
+  Main --> Audio[src/audio]
   Main --> Scripts[src/scripts]
+  Main --> Export[src/export]
   Scene --> Three[three]
   Physics --> Cannon[cannon-es]
   Main --> Monaco[monaco-editor]
-  ProjectRuntime --> Project
+  Export --> JSZip[jszip]
 ```
 
 | Module | Responsibility |
 | --- | --- |
-| `src/scene` | Schema validation, canonical scene lifecycle, generated code, and conservative code parsing. |
+| `src/scene` | Schema validation, canonical scene lifecycle, generated code, conservative code parsing, and the in-memory `SceneAssets` registry. |
 | `src/physics` | Physics facade and Cannon-es adapter for bodies, colliders, impulses, grabs, and stepping. |
 | `src/triggers` | Trigger registration, helper rendering, AABB overlap detection, events, and named actions. |
 | `src/animation` | Three.js animation mixer wrapper, spline manipulation, and camera cutscene playback. |
-| `src/project` | Virtual project file registry, project storage contract, and IndexedDB implementation. |
-| `src/scripts` | Script listing and object attachment metadata. |
-| `src/main.js` | Editor orchestration, viewport interaction, inspectors, Monaco views, save/load, and play mode. |
+| `src/audio` | BGM and SFX playback via `AudioManager`. |
+| `src/scripts` | Script listing and object attachment metadata, backed by `SceneAssets`. |
+| `src/export` | Builds the downloadable zip: `scene.js`, helper modules, scripts, shaders, and audio. |
+| `src/main.js` | Editor orchestration, viewport interaction, inspectors, Monaco views, and scene export. |
 
 ## Runtime services
 
@@ -103,7 +100,9 @@ sequenceDiagram
 
 ### Physics and triggers
 
-The active physics implementation is `CannonAdapter`. It maps a Three.js mesh to a Cannon body and supports box, sphere, cylinder, and capsule-style compound colliders. Dynamic bodies copy simulated position and rotation to their meshes after each physics step. The editor can temporarily make a dynamic body kinematic during gizmo dragging, then restore it on release.
+The active physics implementation is `CannonAdapter`. It maps a Three.js mesh to a Cannon body and supports box, sphere, cylinder, and capsule-style compound colliders, plus an arbitrary number of additional independently-shaped and independently-positioned "extra" colliders per body for compound shapes. A `collider: 'auto'` mode derives the shape and dimensions directly from the mesh's real (unscaled) bounding box, and colliders always rescale 1:1 with the object's `scale`. Dynamic bodies copy simulated position and rotation to their meshes after each physics step. The editor can temporarily make a dynamic body kinematic during gizmo dragging, then restore it on release.
+
+When the "Physics colliders" display toggle is enabled, viewport clicks select the collider itself (not the mesh) and attach the transform gizmo directly to it for independent repositioning/resizing; right-clicking a physics-enabled object or one of its colliders opens a context menu to add or remove extra colliders, building up a compound shape. See [CONTROLS.md](CONTROLS.md) for the full interaction reference.
 
 `TriggerManager` stores trigger metadata, creates optional wireframe helpers, and checks actor bounding boxes against box or sphere areas. It emits `triggerEnter` and `triggerExit` events and can invoke named registered actions such as a cutscene start. `SceneManager` owns canonical trigger records, while the Scene Tree and inspector create, select, configure, and delete those records.
 
@@ -117,7 +116,11 @@ The editor supports built-in Three.js materials including Basic, Phong, Standard
 
 ### Projects and scripts
 
-`ProjectManager` provides an in-memory virtual file registry with project files, scenes, scripts, shaders, assets (models and textures), and audio (BGM and SFX). Folder-local creation actions add source files, while browser file pickers import local asset and audio files into the active IndexedDB project. Its browser persistence adapter stores projects and files in IndexedDB. `ScriptManager` tracks object-to-script attachments; scripts are generated as imports and instances but are not a general script execution sandbox.
+`SceneAssets` is an in-memory registry for scripts, shaders, and imported audio tied to the current editing session; nothing is persisted between page loads. Folder-local creation actions add source files, while a file picker imports local audio into the session for use as BGM or SFX. `ScriptManager` tracks object-to-script attachments; scripts are generated as imports and instances but are not a general script execution sandbox.
+
+### Scene export
+
+`src/export/exportScene.js` builds a downloadable zip using JSZip. It writes `scene.js` (via the code generator), the `TriggerManager` helper module, and conditionally the `CutsceneManager` and `AudioManager` helper modules based on what the scene actually uses, plus any attached scripts, shader source, and imported audio referenced by the scene. Helper module source is embedded via Vite's `?raw` import so the exported code always matches the running editor version. A generated `README.txt` explains how to use the exported files in an external Three.js project.
 
 ### Development and quality checks
 
@@ -127,18 +130,17 @@ The editor supports built-in Three.js materials including Basic, Phong, Standard
 | `npm run dev` | Start the Vite development server. |
 | `npm run build` | Produce and validate the production browser bundle. |
 | `npm run start` | Preview the production bundle locally. |
-| `npm run tauri:dev` | Run the desktop shell with Rust and platform prerequisites installed. |
-| `npm run tauri:build` | Build local desktop bundles. |
+| `npm test` | Run the Node test suite (physics regression tests). |
 
 ## 4+1 Operational Views
 
 ### 3. Process view
 
-The browser editor runs all interaction services in one frontend process. The runtime loop steps physics, syncs dynamic bodies to meshes, advances animations and cutscenes, evaluates trigger overlap, then renders the Three.js scene. Monaco code editing and IndexedDB persistence are asynchronous browser services coordinated by the editor.
+The browser editor runs all interaction services in one frontend process, all scoped to a single in-memory scene. The runtime loop steps physics, syncs dynamic bodies to meshes, advances animations and cutscenes, evaluates trigger overlap, then renders the Three.js scene. Monaco code editing and the scene zip export are asynchronous browser services coordinated by the editor.
 
 ### 4. Physical and deployment view
 
-The browser artifact and desktop packages start from the same Vite build. Pages receives an uploaded `dist` artifact from `main`; native packages are created only from a `v*` tag.
+The browser artifact is built with Vite and deployed to GitHub Pages from `main`.
 
 ```mermaid
 flowchart LR
@@ -147,16 +149,9 @@ flowchart LR
   Install --> Build[npm run build]
   Build --> Artifact[dist Pages artifact]
   Artifact --> Pages[GitHub Pages browser editor]
-  Tag[v* release tag] --> TauriWorkflow[Build Tauri desktop releases workflow]
-  TauriWorkflow --> Windows[Windows NSIS bundle]
-  TauriWorkflow --> Linux[Ubuntu AppImage bundle]
-  Windows --> Release[GitHub release assets]
-  Linux --> Release
 ```
 
-GitHub Pages must be configured to use GitHub Actions as its deployment source. The Vite production base path is `/3ditorJS/`, so editor-page navigation must use relative paths such as `./project-manager.html`.
-
-Tauri configuration lives in `src-tauri`. The desktop shell is present, but a native filesystem bridge is not yet wired into the shared `ProjectStorage` contract. See [DEPLOYMENT.md](DEPLOYMENT.md) for release steps and current workflow status.
+GitHub Pages must be configured to use GitHub Actions as its deployment source. The Vite production base path is `/3ditorJS/`.
 
 ### +1. Scenario view: trigger-driven cutscene
 
@@ -182,17 +177,15 @@ sequenceDiagram
 ## Current limits and planned work
 
 - The code parser intentionally supports only editor-generated constructs, not arbitrary JavaScript.
-- IndexedDB is the working project persistence backend. The project manager opens a selected browser project by passing its project ID to the editor URL.
-- File System Access and Tauri filesystem adapters are planned behind `ProjectStorage`.
+- The scene, scripts, shaders, and imported audio are in-memory only for the current browser session; there is no save/load or project persistence. Use **Download scene** to keep your work.
 - Player scripts are scaffolded and attachable; general user-script lifecycle execution remains incomplete.
-- Audio folders are available in the project explorer, but scene BGM, positional SFX objects, attenuation controls, and audio-asset playback remain to be implemented.
-- Shader files, uniform controls, persistence, and preview diagnostics need further strengthening.
+- Shader files, uniform controls, and preview diagnostics need further strengthening.
 - The inspector supports the active editor schema but does not yet match full Three.js Editor parity.
 - Collision impact visualization and a broad automated test suite are planned.
-- Tauri desktop packages must be considered unverified until a tagged GitHub Actions release succeeds on both matrix platforms.
+- A prior iteration of this project targeted a multi-scene project browser and a Tauri desktop shell; that work is preserved on the `game-engine-full` branch and is out of scope for the current vision.
 
 ## Related documentation
 
 - [HOW_TO_USE.md](HOW_TO_USE.md): editor workflows and authoring instructions.
-- [DEPLOYMENT.md](DEPLOYMENT.md): GitHub Pages and desktop release procedures.
+- [DEPLOYMENT.md](DEPLOYMENT.md): GitHub Pages deployment procedures.
 - [../IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md): phased roadmap and acceptance criteria.

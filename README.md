@@ -1,6 +1,6 @@
 # 3ditor JS
 
-A browser-first Three.js editor and project maker. The shared editor core targets the browser first and is also prepared for a Tauri desktop shell.
+A browser-based Three.js scene and cutscene creator. Build a single scene visually, then download it as a `scene.js` module (plus every helper file it depends on) ready to drop into a regular Three.js project.
 
 ## Requirements
 
@@ -14,13 +14,17 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. A new project starts with an empty Main Scene, neutral lighting, an editor camera, and a grid.
+Open the local URL printed by Vite. The editor starts with an empty Main Scene, neutral lighting, an editor camera, and a grid.
 
-The editor currently supports scene JSON, generated Three.js scene code, Cannon-es physics, trigger zones, spline cutscenes, audio emitters and BGM, Monaco JavaScript/GLSL editors, material and shader authoring, scene cameras, script attachments, scene-tree editing, and browser project persistence.
+The editor supports scene JSON, generated Three.js scene code, Cannon-es physics with an editable/compound collider system, trigger zones, spline cutscenes, audio (BGM and SFX), Monaco JavaScript/GLSL editors, material and shader authoring, scene cameras, script attachments, and scene-tree editing.
+
+## Exporting a scene
+
+Press **Download scene** in the top bar to generate a zip containing `scene.js`, the helper modules it imports (triggers, cutscenes, audio), any scripts/shaders you authored, and any audio you uploaded. Unzip it into an existing Three.js project and import `scene.js` as a regular ES module.
 
 ## Documentation
 
-Start with [docs/HOW_TO_USE.md](docs/HOW_TO_USE.md) for editor workflows, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the complete system reference and 4+1 diagrams, and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Pages and desktop releases.
+Start with [docs/HOW_TO_USE.md](docs/HOW_TO_USE.md) for editor workflows and [docs/CONTROLS.md](docs/CONTROLS.md) for a complete list of every feature and control. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system reference and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for GitHub Pages deployment.
 
 ## Architecture
 
@@ -37,19 +41,11 @@ Visual editor / inspector / gizmos
 		     Three.js runtime
 ```
 
-Three.js remains the rendering and scene foundation. Physics, triggers, cutscenes, UI, scripts, and project management are editor/runtime conveniences built around it.
+Three.js remains the rendering and scene foundation. Physics, triggers, cutscenes, scripts, and audio are editor conveniences built around it, all of which are bundled into the exported scene.
 
 ## Deployment
 
-The browser build is static and deploys through GitHub Actions. Tauri uses the same `dist` output for native desktop packaging and will eventually provide the native filesystem adapter. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Pages setup, the desktop release workflow, and troubleshooting.
-
-```bash
-npm run build
-npm run tauri:dev
-npm run tauri:build
-```
-
-The Tauri commands require the Rust toolchain and platform build prerequisites. Windows artifacts can be built on Windows; Linux AppImage artifacts should be built on Linux or in a Linux GitHub Actions runner.
+The app is a static browser build deployed through GitHub Actions to GitHub Pages. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for setup and troubleshooting.
 
 ## Scene authoring contract
 
@@ -63,3 +59,7 @@ The Tauri commands require the Rust toolchain and platform build prerequisites. 
 npm run build
 npm run start
 ```
+
+## Prior full game-engine vision
+
+An earlier iteration of this project aimed to be a full in-browser game engine with a multi-scene project browser and a Tauri desktop shell. That work is preserved on the `game-engine-full` branch. `main` and `dev` now track the scene/cutscene creator vision described above.

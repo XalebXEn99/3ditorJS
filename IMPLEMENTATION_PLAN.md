@@ -1,5 +1,7 @@
 # IMPLEMENTATION_PLAN.md
 
+> **Pivot note:** This plan describes the original full in-browser game-engine vision (multi-scene project browser, Tauri desktop packaging, menu editor). The project has since pivoted to a scene/cutscene creator: build one scene, download `scene.js` and its dependencies as a zip for use in a regular Three.js project. The full game-engine implementation is preserved on the `game-engine-full` branch. The plan below is kept for historical reference only and no longer reflects `main`/`dev`.
+
 # ThreeJS Editor Implementation Plan
 
 **Purpose**  

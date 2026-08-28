@@ -1,22 +1,24 @@
 export class ScriptManager {
-  constructor(projectManager) {
-    this.projectManager = projectManager;
-    this.editors = new Map();
+  constructor(sceneAssets) {
+    this.sceneAssets = sceneAssets;
   }
 
   listScripts() {
-    return this.projectManager.listFiles().filter((file) => file.type === 'javascript' && file.path.startsWith('scripts/'));
+    return this.sceneAssets.listScripts();
   }
 
   createScript(name = 'new-script') {
-    return this.projectManager.createScript(name);
+    return this.sceneAssets.createScript(name);
   }
 
-  attach(sceneManager, objectId, path, exportName = 'PlayerController') {
+  attach(sceneManager, objectId, path, exportName = null) {
     const objectJSON = sceneManager.sceneJSON?.objects?.find((entry) => entry.id === objectId);
     if (!objectJSON) throw new Error(`Unknown scene object: ${objectId}`);
+    const resolvedExportName = exportName || this.sceneAssets.get(path)?.exportName
+      || this.sceneAssets.get(path)?.content?.match(/export class (\w+)/)?.[1]
+      || 'GameScript';
     sceneManager.recordHistory();
-    objectJSON.scripts = [...(objectJSON.scripts || []).filter((script) => script.path !== path), { path, export: exportName, enabled: true }];
+    objectJSON.scripts = [...(objectJSON.scripts || []).filter((script) => script.path !== path), { path, export: resolvedExportName, enabled: true }];
   }
 
   detach(sceneManager, objectId, path) {

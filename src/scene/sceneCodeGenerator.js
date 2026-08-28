@@ -1,3 +1,38 @@
+const AUTO_COLLIDER_BASE_DIMENSIONS_BY_TYPE = {
+  box: { shape: 'box', size: [1, 1, 1] },
+  plane: { shape: 'box', size: [30, 0.2, 30] },
+  gltf: { shape: 'box', size: [1, 1, 1] },
+  model: { shape: 'box', size: [1, 1, 1] },
+  sphere: { shape: 'sphere', size: [1.4, 1.4, 1.4] },
+  cylinder: { shape: 'cylinder', size: [1.2, 1.4, 1.2] },
+  cone: { shape: 'cylinder', size: [1.4, 1.4, 1.4] },
+  torus: { shape: 'cylinder', size: [1.84, 0.44, 1.84] },
+};
+
+function resolveAutoPhysics(objectJSON, physics) {
+  if (physics.collider !== 'auto') return physics;
+  const fallback = AUTO_COLLIDER_BASE_DIMENSIONS_BY_TYPE[objectJSON.type] || AUTO_COLLIDER_BASE_DIMENSIONS_BY_TYPE.box;
+  if (fallback.shape === 'sphere') return { ...physics, collider: 'sphere', radius: fallback.size[0] / 2 };
+  if (fallback.shape === 'cylinder') return { ...physics, collider: 'cylinder', radius: fallback.size[0] / 2, height: fallback.size[1] };
+  return { ...physics, collider: 'box', size: physics.size || fallback.size };
+}
+
+function colliderShapeExpression(spec, objectScale) {
+  const radialScale = (objectScale[0] + objectScale[2]) / 2;
+  const uniformScale = (objectScale[0] + objectScale[1] + objectScale[2]) / 3;
+  const baseSize = spec.size || [1, 1, 1];
+  const size = baseSize.map((value, index) => value * (objectScale[index] ?? 1));
+  const sphereRadius = (spec.radius ?? baseSize[0] / 2) * uniformScale;
+  const radialRadius = (spec.radius ?? baseSize[0] / 2) * radialScale;
+  const scaledHeight = (spec.height ?? baseSize[1]) * objectScale[1];
+  const shape = spec.collider === 'sphere'
+    ? `new CANNON.Sphere(${sphereRadius})`
+    : spec.collider === 'cylinder'
+      ? `new CANNON.Cylinder(${radialRadius}, ${radialRadius}, ${scaledHeight}, 8)`
+      : `new CANNON.Box(new CANNON.Vec3(${size[0] / 2}, ${size[1] / 2}, ${size[2] / 2}))`;
+  return { shape, radialRadius, scaledHeight };
+}
+
 export function generateSceneCode(sceneJSON) {
   const scriptImports = [...new Set((sceneJSON.objects || []).flatMap((objectJSON) => (objectJSON.scripts || []).map((script) => `import { ${script.export} } from './${script.path}';`)))];
   const shaderImports = (sceneJSON.objects || []).flatMap((objectJSON) => {
@@ -119,20 +154,28 @@ export function generateSceneCode(sceneJSON) {
       lines.push(`  ${variableName}.userData.scripts.push(${scriptVariable});`);
     }
     if (objectJSON.physics?.enabled) {
-      const physics = objectJSON.physics;
-      const size = physics.size || [1, 1, 1];
-      const shape = physics.collider === 'sphere'
-        ? `new CANNON.Sphere(${physics.radius ?? size[0] / 2})`
-        : physics.collider === 'cylinder'
-          ? `new CANNON.Cylinder(${physics.radius ?? size[0] / 2}, ${physics.radius ?? size[0] / 2}, ${physics.height ?? size[1]}, 8)`
-          : `new CANNON.Box(new CANNON.Vec3(${size[0] / 2}, ${size[1] / 2}, ${size[2] / 2}))`;
+      const physics = resolveAutoPhysics(objectJSON, objectJSON.physics);
+      const objectScale = objectJSON.scale || [1, 1, 1];
+      const { shape, radialRadius, scaledHeight } = colliderShapeExpression(physics, objectScale);
       lines.push(`  const ${variableName}Body = new CANNON.Body({ mass: ${physics.mass ?? 0}, linearDamping: ${physics.linearDamping ?? 0.01}, angularDamping: ${physics.angularDamping ?? 0.01} });`);
       if (physics.collider === 'capsule') {
-        lines.push(`  ${variableName}Body.addShape(new CANNON.Cylinder(${physics.radius ?? 0.5}, ${physics.radius ?? 0.5}, ${physics.height ?? 1}, 8));`);
-        lines.push(`  ${variableName}Body.addShape(new CANNON.Sphere(${physics.radius ?? 0.5}), new CANNON.Vec3(0, ${(physics.height ?? 1) / 2}, 0));`);
-        lines.push(`  ${variableName}Body.addShape(new CANNON.Sphere(${physics.radius ?? 0.5}), new CANNON.Vec3(0, -${(physics.height ?? 1) / 2}, 0));`);
+        lines.push(`  ${variableName}Body.addShape(new CANNON.Cylinder(${radialRadius}, ${radialRadius}, ${scaledHeight}, 8));`);
+        lines.push(`  ${variableName}Body.addShape(new CANNON.Sphere(${radialRadius}), new CANNON.Vec3(0, ${scaledHeight / 2}, 0));`);
+        lines.push(`  ${variableName}Body.addShape(new CANNON.Sphere(${radialRadius}), new CANNON.Vec3(0, -${scaledHeight / 2}, 0));`);
       } else {
         lines.push(`  ${variableName}Body.addShape(${shape});`);
+      }
+      for (const extra of physics.extraColliders || []) {
+        const extraOffset = extra.position || [0, 0, 0];
+        const scaledOffset = extraOffset.map((value, index) => value * (objectScale[index] ?? 1));
+        const extraShape = colliderShapeExpression(extra, objectScale);
+        if (extra.collider === 'capsule') {
+          lines.push(`  ${variableName}Body.addShape(new CANNON.Cylinder(${extraShape.radialRadius}, ${extraShape.radialRadius}, ${extraShape.scaledHeight}, 8), new CANNON.Vec3(${scaledOffset.join(', ')}));`);
+          lines.push(`  ${variableName}Body.addShape(new CANNON.Sphere(${extraShape.radialRadius}), new CANNON.Vec3(${scaledOffset[0]}, ${scaledOffset[1] + extraShape.scaledHeight / 2}, ${scaledOffset[2]}));`);
+          lines.push(`  ${variableName}Body.addShape(new CANNON.Sphere(${extraShape.radialRadius}), new CANNON.Vec3(${scaledOffset[0]}, ${scaledOffset[1] - extraShape.scaledHeight / 2}, ${scaledOffset[2]}));`);
+        } else {
+          lines.push(`  ${variableName}Body.addShape(${extraShape.shape}, new CANNON.Vec3(${scaledOffset.join(', ')}));`);
+        }
       }
       lines.push(`  ${variableName}Body.position.set(${physics.position?.join(', ') || objectJSON.position?.join(', ') || '0, 0, 0'});`);
       if (physics.velocity) lines.push(`  ${variableName}Body.velocity.set(${physics.velocity.join(', ')});`);

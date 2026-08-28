@@ -13,10 +13,10 @@ import { AnimationManager } from './animation/AnimationManager.js';
 import { CutsceneManager } from './animation/CutsceneManager.js';
 import { SplineEditor } from './animation/SplineEditor.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { ProjectManager } from './project/ProjectManager.js';
-import { IndexedDbProjectStorage } from './project/IndexedDbProjectStorage.js';
+import { SceneAssets } from './scene/SceneAssets.js';
 import { ScriptManager } from './scripts/ScriptManager.js';
 import { AudioManager } from './audio/AudioManager.js';
+import { buildSceneExportZip, downloadBlob } from './export/exportScene.js';
 import './style.css';
 
 self.MonacoEnvironment = {
@@ -60,14 +60,10 @@ const codeTab = document.querySelector('#code-tab');
 const editorViews = document.querySelectorAll('[data-editor-view]');
 const panel = document.querySelector('.editor-panel');
 const panelResizeHandle = document.querySelector('#panel-resize-handle');
-const projectTree = document.querySelector('#project-tree');
-const projectStatus = document.querySelector('#project-status');
-const projectSave = document.querySelector('#project-save');
-const projectLoad = document.querySelector('#project-load');
-const sceneTransition = document.querySelector('#scene-transition');
-const projectPanel = document.querySelector('.project-panel');
-const projectCollapse = document.querySelector('#project-collapse');
-const projectResizeHandle = document.querySelector('#project-resize-handle');
+const editorStatus = document.querySelector('#editor-status');
+const downloadSceneButton = document.querySelector('#download-scene');
+const uploadBgmFileButton = document.querySelector('#upload-bgm-file');
+const uploadSfxFileButton = document.querySelector('#upload-sfx-file');
 const inspectorCollapse = document.querySelector('#panel-collapse');
 const objectModal = document.querySelector('#object-modal');
 const objectModalClose = document.querySelector('#object-modal-close');
@@ -77,17 +73,15 @@ const sceneAddObject = document.querySelector('#scene-add-object');
 const playScene = document.querySelector('#play-scene');
 const scriptAttachmentFields = document.querySelector('#script-attachment-fields');
 const createScriptButton = document.querySelector('#create-script');
+const newScriptForm = document.querySelector('#new-script-form');
+const newScriptNameInput = document.querySelector('#new-script-name');
+const confirmNewScriptButton = document.querySelector('#confirm-new-script');
+const cancelNewScriptButton = document.querySelector('#cancel-new-script');
 const editScriptButton = document.querySelector('#edit-script');
 const saveScriptButton = document.querySelector('#save-script');
 const scriptSelect = document.querySelector('#script-select');
 const scriptEditorView = document.querySelector('#script-editor-view');
 const scriptEditorHost = document.querySelector('#script-editor-host');
-const fileWorkspace = document.querySelector('#file-workspace');
-const fileWorkspaceTitle = document.querySelector('#file-workspace-title');
-const fileEditorHost = document.querySelector('#file-editor-host');
-const fileDetailView = document.querySelector('#file-detail-view');
-const saveFileWorkspace = document.querySelector('#save-file-workspace');
-const returnToScene = document.querySelector('#return-to-scene');
 const sceneDeleteObject = document.querySelector('#scene-delete-object');
 const sceneDuplicateObject = document.querySelector('#scene-duplicate-object');
 const scene = new THREE.Scene();
@@ -98,162 +92,44 @@ let cameraHelper = null;
 const sceneCameras = new Map();
 const gltfLoader = new GLTFLoader();
 
-const projectManager = new ProjectManager({
+const sceneAssets = new SceneAssets({
   onChange: () => {
-    renderProjectTree();
     populateScripts();
     populateBgmSelect();
   },
-  onOpen: (file) => {
-    projectStatus.textContent = `Opened ${file.path}`;
-    if (file.type === 'scene') {
-      showSceneWorkspace();
-      if (file.sceneJSON) sceneManager.switchTo(file.sceneId);
-    } else {
-      showFileWorkspace(file);
-    }
-  },
 });
-const projectStorage = new IndexedDbProjectStorage();
-const activeProjectId = new URLSearchParams(window.location.search).get('project');
-const scriptManager = new ScriptManager(projectManager);
+const scriptManager = new ScriptManager(sceneAssets);
 let playMode = false;
 let playTarget = null;
 let scriptEditor = null;
-let fileEditor = null;
-let activeProjectFile = null;
-const projectFileModels = new Map();
+const shaderFileModels = new Map();
 
-function renderProjectTree() {
-  projectTree.replaceChildren();
-  const folders = new Map();
-  for (const file of projectManager.listFiles()) {
-    const parts = file.path.split('/');
-    const folder = parts.length > 1 ? parts[0] : 'project';
-    const name = parts.length > 1 ? parts.slice(1).join('/') : file.path;
-    if (!folders.has(folder)) folders.set(folder, []);
-    folders.get(folder).push({ file, name });
-  }
-  const folderOrder = ['project', 'scenes', 'scripts', 'shaders', 'assets', 'audio'];
-  for (const folder of folderOrder) {
-    const files = folders.get(folder) || [];
-    const folderLabel = document.createElement('p');
-    folderLabel.className = 'project-folder';
-    folderLabel.textContent = restName(folder);
-    projectTree.append(folderLabel);
-    files.forEach(({ file, name }) => {
-      const row = document.createElement('div');
-      row.className = 'project-file-row';
-      const button = document.createElement('button');
-      button.className = 'project-file';
-      button.type = 'button';
-      button.textContent = name;
-      button.title = file.path;
-      button.addEventListener('click', () => projectManager.open(file));
-      const deleteButton = document.createElement('button');
-      deleteButton.type = 'button';
-      deleteButton.className = 'project-file-delete';
-      deleteButton.textContent = '×';
-      deleteButton.setAttribute('aria-label', `Delete ${file.path}`);
-      deleteButton.title = `Delete ${file.path}`;
-      deleteButton.addEventListener('click', () => deleteProjectFile(file));
-      row.append(button, deleteButton);
-      projectTree.append(row);
-    });
-    const createLabel = folder === 'scenes' ? '+ New scene'
-      : folder === 'scripts' ? '+ New script'
-        : folder === 'shaders' ? '+ New shader'
-          : folder === 'assets' ? '+ Import asset'
-            : folder === 'audio' ? '+ Import BGM / SFX'
-              : null;
-    if (createLabel) {
-      const createButton = document.createElement('button');
-      createButton.type = 'button';
-      createButton.className = 'project-folder-action';
-      createButton.textContent = createLabel;
-      createButton.addEventListener('click', () => createProjectFile(folder));
-      projectTree.append(createButton);
-    }
-  }
-}
-
-function restName(value) {
-  const labels = {
-    project: 'Project files',
-    scenes: 'Scenes',
-    scripts: 'Scripts',
-    shaders: 'Shaders',
-    assets: 'Assets',
-    audio: 'Audio',
-    animations: 'Animations',
-    menus: 'Menus',
-  };
-  return labels[value] || value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function createProjectFile(folder) {
-  if (folder === 'assets' || folder === 'audio') {
-    if (folder === 'audio') importAudioFiles();
-    else importProjectFiles(folder);
-    return;
-  }
-  const typeByFolder = { scenes: 'scene', scripts: 'javascript', shaders: 'shader' };
-  const prefixByFolder = { scenes: 'scene', scripts: 'script', shaders: 'shader' };
-  const name = `${prefixByFolder[folder]}-${projectManager.listFiles().filter((file) => file.type === typeByFolder[folder]).length + 1}`;
-  try {
-    if (folder === 'scenes') {
-      const sceneJSON = createDefaultScene();
-      sceneJSON.id = `scene-${Date.now()}`;
-      sceneJSON.metadata.name = name.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-      sceneManager.registerScene(sceneJSON.id, sceneJSON);
-      const file = projectManager.createScene(name, sceneJSON);
-      file.content = generateSceneCode(sceneJSON);
-    }
-    if (folder === 'scripts') projectManager.createScript(name);
-    if (folder === 'shaders') {
-      const { vertexPath } = projectManager.createShaderFiles(name);
-      projectManager.open(projectManager.files.get(vertexPath));
-    }
-  } catch (error) {
-    projectStatus.textContent = error.message;
-  }
-}
-
-function importProjectFiles(folder) {
+function pickAudioFiles(category) {
   const picker = document.createElement('input');
   picker.type = 'file';
   picker.multiple = true;
-  picker.accept = folder.startsWith('audio/') ? 'audio/*' : '.gltf,.glb,image/*';
-  picker.addEventListener('change', async () => {
-    const added = projectManager.addImportedFiles(folder, picker.files);
-    try {
-      for (const file of added) {
-        if (projectManager.storage && projectManager.projectId) await projectManager.saveProjectFile(file.path, file.content);
-      }
-      projectStatus.textContent = added.length ? `Imported ${added.length} ${folder.startsWith('audio/') ? 'audio file' : 'asset'}${added.length === 1 ? '' : 's'}` : 'No files selected';
-    } catch (error) {
-      projectStatus.textContent = error.message;
-    }
+  picker.accept = 'audio/*';
+  picker.addEventListener('change', () => {
+    const added = sceneAssets.addImportedAudio(category, picker.files);
+    editorStatus.textContent = added.length ? `Uploaded ${added.length} audio file${added.length === 1 ? '' : 's'}` : 'No files selected';
   }, { once: true });
   picker.click();
 }
 
-function importAudioFiles() {
-  const category = window.confirm('Import background music? Choose Cancel to import sound effects.') ? 'bgm' : 'sfx';
-  importProjectFiles(`audio/${category}`);
-}
+uploadBgmFileButton.addEventListener('click', () => pickAudioFiles('bgm'));
+uploadSfxFileButton.addEventListener('click', () => pickAudioFiles('sfx'));
 
-async function deleteProjectFile(file) {
+downloadSceneButton.addEventListener('click', async () => {
   try {
-    const deleted = await projectManager.deleteProjectFile(file.path);
-    if (!deleted) return;
-    if (activeProjectFile?.path === file.path) showSceneWorkspace();
-    projectStatus.textContent = `Deleted ${file.path}`;
+    editorStatus.textContent = 'Building scene export…';
+    const blob = await buildSceneExportZip(sceneManager.exportJSON(), sceneAssets);
+    const slug = (sceneManager.exportJSON().metadata?.name || 'scene').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'scene';
+    downloadBlob(blob, `${slug}.zip`);
+    editorStatus.textContent = 'Scene exported';
   } catch (error) {
-    projectStatus.textContent = error.message;
+    editorStatus.textContent = error.message;
   }
-}
-renderProjectTree();
+});
 
 const camera = new THREE.PerspectiveCamera(
   50,
@@ -286,8 +162,17 @@ transformControls.addEventListener('dragging-changed', (event) => {
       const trigger = triggerManager.triggers.get(activeSelection.id);
       if (trigger) triggerGizmoEdit = { id: activeSelection.id, size: [...(trigger.data.size || [1, 1, 1])] };
     }
+    if (activeSelection?.type === 'collider') {
+      const objectJSON = sceneManager.exportJSON().objects.find((entry) => entry.id === activeSelection.id);
+      const colliderMesh = sceneManager.getMesh(activeSelection.id);
+      const spec = getColliderSpec(objectJSON, activeSelection.colliderIndex);
+      const resolvedPhysics = activeSelection.colliderIndex === null ? resolveColliderOptions(objectJSON, colliderMesh, spec) : spec;
+      const effective = computeEffectiveColliderDims(colliderMesh, resolvedPhysics);
+      colliderGizmoEdit = { id: activeSelection.id, colliderIndex: activeSelection.colliderIndex, collider: resolvedPhysics.collider, size: effective.size, radius: effective.radius, height: effective.height };
+    }
   } else {
     if (mesh) endGrab(mesh);
+    if (mesh && gizmoMode === 'scale') rebuildPhysics();
     if (triggerGizmoEdit) {
       const trigger = triggerManager.triggers.get(triggerGizmoEdit.id);
       if (trigger) {
@@ -301,6 +186,39 @@ transformControls.addEventListener('dragging-changed', (event) => {
         renderJSON();
       }
       triggerGizmoEdit = null;
+    }
+    if (colliderGizmoEdit) {
+      const { id, colliderIndex, collider } = colliderGizmoEdit;
+      const colliderMesh = sceneManager.getMesh(id);
+      const helper = getColliderHelper(id, colliderIndex);
+      if (colliderMesh && helper) {
+        const helperScale = helper.scale.toArray();
+        const finalEffective = {
+          size: colliderGizmoEdit.size.map((value, index) => value * helperScale[index]),
+          radius: colliderGizmoEdit.radius * helperScale[0],
+          height: colliderGizmoEdit.height * helperScale[1],
+        };
+        const baseDims = baseColliderDimsFromEffective(colliderMesh, collider, finalEffective);
+        helper.scale.set(1, 1, 1);
+        if (colliderIndex === null) {
+          sceneManager.updateObjectProperties(id, { physics: { collider, position: helper.position.toArray(), rotation: [helper.rotation.x, helper.rotation.y, helper.rotation.z], ...baseDims } });
+        } else {
+          const scale = colliderMesh.scale.toArray();
+          const localOffset = [
+            (helper.position.x - colliderMesh.position.x) / (scale[0] || 1),
+            (helper.position.y - colliderMesh.position.y) / (scale[1] || 1),
+            (helper.position.z - colliderMesh.position.z) / (scale[2] || 1),
+          ];
+          const objectJSON = sceneManager.exportJSON().objects.find((entry) => entry.id === id);
+          const extras = [...(objectJSON.physics.extraColliders || [])];
+          extras[colliderIndex] = { ...extras[colliderIndex], collider, position: localOffset, ...baseDims };
+          sceneManager.updateObjectProperties(id, { physics: { extraColliders: extras } });
+        }
+        rebuildPhysics();
+        if (activeSelection?.type === 'collider' && activeSelection.id === id && activeSelection.colliderIndex === colliderIndex) selectCollider(id, colliderIndex);
+        renderJSON();
+      }
+      colliderGizmoEdit = null;
     }
     sceneManager.endEdit();
   }
@@ -342,6 +260,17 @@ transformControls.addEventListener('objectChange', () => {
     sceneManager.updateAudioEmitter(activeSelection.id, { position: helper.position.toArray() });
     emitter.data.position = helper.position.toArray();
     updateVectorFields(propertyFields, 'Position', helper.position.toArray());
+  } else if (activeSelection?.type === 'collider') {
+    const helper = getColliderHelper(activeSelection.id, activeSelection.colliderIndex);
+    if (!helper) return;
+    if (gizmoMode === 'scale' && colliderGizmoEdit) {
+      const helperScale = helper.scale.toArray();
+      const size = colliderGizmoEdit.size.map((value, index) => value * helperScale[index]);
+      updateVectorFields(transformFields, 'Size', size);
+      updateVectorFields(transformFields, 'Radius / height', [colliderGizmoEdit.radius * helperScale[0], colliderGizmoEdit.height * helperScale[1]]);
+    } else {
+      updateVectorFields(transformFields, 'Position', helper.position.toArray());
+    }
   }
   renderJSON();
 });
@@ -357,7 +286,7 @@ const cutsceneManager = new CutsceneManager({
 });
 const audioManager = new AudioManager({
   camera,
-  getFile: (path) => projectManager.files.get(path),
+  getFile: (path) => sceneAssets.get(path),
 });
 const splineEditor = new SplineEditor({
   scene,
@@ -391,9 +320,6 @@ for (const cameraJSON of sceneData.cameras || []) {
   scene.add(helper);
   if (cameraJSON.parent) sceneManager.getMesh(cameraJSON.parent)?.add(sceneCamera);
 }
-sceneManager.registerScene(sceneData.id, sceneData);
-projectManager.attachScene('scenes/main.scene.js', sceneData);
-renderProjectTree();
 for (const lightJSON of sceneData.lights || []) {
   const light = lightJSON.type === 'hemisphere'
     ? new THREE.HemisphereLight(lightJSON.skyColor, lightJSON.groundColor, lightJSON.intensity)
@@ -421,37 +347,118 @@ rebuildAudio();
 triggerManager.on('triggerEnter', (trigger, actor) => {
   console.info(trigger.params?.message || `${actor.name} entered ${trigger.id}`);
 });
-let sceneTransitionActive = false;
-function transitionToScene(sceneId) {
-  if (sceneTransitionActive || !sceneManager.scenes.has(sceneId)) return;
-  sceneTransitionActive = true;
-  sceneTransition.classList.add('is-fading');
-  window.setTimeout(() => {
-    sceneManager.switchTo(sceneId);
-    window.setTimeout(() => {
-      sceneTransition.classList.remove('is-fading');
-      sceneTransitionActive = false;
-    }, 350);
-  }, 350);
-}
-triggerManager.registerAction('switchScene', (params) => transitionToScene(params.sceneId));
 triggerManager.registerAction('playCutscene', (params) => cutsceneManager.play(params.cutsceneId));
 triggerManager.registerAction('playSfx', (params, actor) => audioManager.playSfx(params.path, { position: actor.position.toArray(), volume: params.volume ?? 0.8, radius: params.radius ?? 12 }));
 
+const AUTO_COLLIDER_SHAPE_BY_OBJECT_TYPE = {
+  box: 'box',
+  plane: 'box',
+  gltf: 'box',
+  model: 'box',
+  sphere: 'sphere',
+  cylinder: 'cylinder',
+  cone: 'cylinder',
+  torus: 'cylinder',
+};
+
+function getBaseGeometrySize(mesh) {
+  const originalScale = mesh.scale.clone();
+  mesh.scale.set(1, 1, 1);
+  mesh.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(mesh);
+  mesh.scale.copy(originalScale);
+  mesh.updateMatrixWorld(true);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  return [size.x || 1, Math.max(size.y, 0.05), size.z || 1];
+}
+
+function resolveColliderOptions(objectJSON, mesh, physics) {
+  if (physics.collider !== 'auto') return physics;
+  const baseSize = getBaseGeometrySize(mesh);
+  const shape = AUTO_COLLIDER_SHAPE_BY_OBJECT_TYPE[objectJSON.type] || 'box';
+  if (shape === 'sphere') return { ...physics, collider: 'sphere', radius: Math.max(...baseSize) / 2 };
+  if (shape === 'cylinder') return { ...physics, collider: 'cylinder', radius: Math.max(baseSize[0], baseSize[2]) / 2, height: baseSize[1] };
+  return { ...physics, collider: 'box', size: baseSize };
+}
+
+function computeEffectiveColliderDims(mesh, resolvedPhysics) {
+  const scale = mesh.scale.toArray();
+  const radialScale = (scale[0] + scale[2]) / 2;
+  const size = (resolvedPhysics.size || [1, 1, 1]).map((value, index) => value * scale[index]);
+  const radius = (resolvedPhysics.radius || (resolvedPhysics.size || [1, 1, 1])[0] / 2)
+    * (resolvedPhysics.collider === 'sphere' ? (scale[0] + scale[1] + scale[2]) / 3 : radialScale);
+  const height = (resolvedPhysics.height || (resolvedPhysics.size || [1, 1, 1])[1]) * scale[1];
+  return { size, radius, height, scale, radialScale };
+}
+
+function baseColliderDimsFromEffective(mesh, collider, effective) {
+  const scale = mesh.scale.toArray();
+  const radialScale = (scale[0] + scale[2]) / 2;
+  const uniformScale = (scale[0] + scale[1] + scale[2]) / 3;
+  if (collider === 'sphere') return { radius: effective.radius / (uniformScale || 1) };
+  if (collider === 'cylinder' || collider === 'capsule') {
+    return { radius: effective.radius / (radialScale || 1), height: effective.height / (scale[1] || 1) };
+  }
+  return { size: effective.size.map((value, index) => value / (scale[index] || 1)) };
+}
+
+function getColliderHelper(id, colliderIndex) {
+  return physicsHelpers.get(id)?.find((entry) => entry.colliderIndex === colliderIndex)?.object3D;
+}
+
+function getColliderSpec(objectJSON, colliderIndex) {
+  if (colliderIndex === null) return objectJSON.physics;
+  return { collider: 'box', ...(objectJSON.physics.extraColliders || [])[colliderIndex] };
+}
+
+function buildColliderHelper(collider, size, radius, height) {
+  if (collider === 'sphere') {
+    return new THREE.Mesh(
+      new THREE.SphereGeometry(radius, 20, 12),
+      new THREE.MeshBasicMaterial({ color: 0x91c483, wireframe: true }),
+    );
+  }
+  if (collider === 'cylinder') {
+    return new THREE.Mesh(
+      new THREE.CylinderGeometry(radius, radius, height, 16),
+      new THREE.MeshBasicMaterial({ color: 0x91c483, wireframe: true }),
+    );
+  }
+  if (collider === 'capsule') {
+    const group = new THREE.Group();
+    const material = new THREE.MeshBasicMaterial({ color: 0x91c483, wireframe: true });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 16), material);
+    const top = new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 10), material);
+    const bottom = new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 10), material);
+    top.position.y = height / 2;
+    bottom.position.y = -height / 2;
+    group.add(body, top, bottom);
+    return group;
+  }
+  return new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(...size)),
+    new THREE.LineBasicMaterial({ color: 0x91c483 }),
+  );
+}
+
 function rebuildPhysics() {
   initPhysics({ gravity: [0, -9.81, 0], engine: 'cannon' });
-  for (const helper of physicsHelpers.values()) {
-    scene.remove(helper);
-    helper.traverse((child) => {
-      child.geometry?.dispose();
-      child.material?.dispose();
-    });
+  for (const entries of physicsHelpers.values()) {
+    for (const { object3D } of entries) {
+      scene.remove(object3D);
+      object3D.traverse((child) => {
+        child.geometry?.dispose();
+        child.material?.dispose();
+      });
+    }
   }
   physicsHelpers.clear();
   for (const objectJSON of sceneManager.exportJSON().objects) {
     if (objectJSON.physics?.enabled) {
       const mesh = sceneManager.getMesh(objectJSON.id);
-      addRigidBody(mesh, objectJSON.physics);
+      const resolvedPhysics = resolveColliderOptions(objectJSON, mesh, objectJSON.physics);
+      addRigidBody(mesh, resolvedPhysics);
       if (objectJSON.physics.impactSfx) {
         let lastImpactAt = 0;
         onCollision(mesh, (_mesh, _otherBody, event) => {
@@ -466,41 +473,38 @@ function rebuildPhysics() {
           });
         });
       }
-      const size = objectJSON.physics.size || [1, 1, 1];
-      const radius = objectJSON.physics.radius || size[0] / 2;
-      const height = objectJSON.physics.height || size[1];
-      let helper;
-      if (objectJSON.physics.collider === 'sphere') {
-        helper = new THREE.Mesh(
-          new THREE.SphereGeometry(radius, 20, 12),
-          new THREE.MeshBasicMaterial({ color: 0x91c483, wireframe: true }),
-        );
-      } else if (objectJSON.physics.collider === 'cylinder') {
-        helper = new THREE.Mesh(
-          new THREE.CylinderGeometry(radius, radius, height, 16),
-          new THREE.MeshBasicMaterial({ color: 0x91c483, wireframe: true }),
-        );
-      } else if (objectJSON.physics.collider === 'capsule') {
-        helper = new THREE.Group();
-        const material = new THREE.MeshBasicMaterial({ color: 0x91c483, wireframe: true });
-        const body = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 16), material);
-        const top = new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 10), material);
-        const bottom = new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 10), material);
-        top.position.y = height / 2;
-        bottom.position.y = -height / 2;
-        helper.add(body, top, bottom);
-      } else {
-        helper = new THREE.LineSegments(
-          new THREE.EdgesGeometry(new THREE.BoxGeometry(...size)),
-          new THREE.LineBasicMaterial({ color: 0x91c483 }),
-        );
-      }
+      const entries = [];
+      const { size, radius, height } = computeEffectiveColliderDims(mesh, resolvedPhysics);
+      const helper = buildColliderHelper(resolvedPhysics.collider, size, radius, height);
       helper.position.fromArray(objectJSON.physics.position || mesh.position.toArray());
       helper.rotation.set(...(objectJSON.physics.rotation || mesh.rotation.toArray()));
       helper.userData.followMeshRotation = (objectJSON.physics.mass ?? 0) > 0;
+      helper.userData.sceneObjectId = objectJSON.id;
+      helper.userData.colliderIndex = null;
+      helper.traverse((child) => { child.userData.sceneObjectId = objectJSON.id; child.userData.colliderIndex = null; });
       helper.visible = showPhysicsBodies;
       scene.add(helper);
-      physicsHelpers.set(objectJSON.id, helper);
+      entries.push({ object3D: helper, colliderIndex: null });
+      const scale = mesh.scale.toArray();
+      (objectJSON.physics.extraColliders || []).forEach((extra, index) => {
+        const extraDims = computeEffectiveColliderDims(mesh, extra);
+        const extraHelper = buildColliderHelper(extra.collider || 'box', extraDims.size, extraDims.radius, extraDims.height);
+        const localOffset = extra.position || [0, 0, 0];
+        extraHelper.position.set(
+          mesh.position.x + localOffset[0] * scale[0],
+          mesh.position.y + localOffset[1] * scale[1],
+          mesh.position.z + localOffset[2] * scale[2],
+        );
+        extraHelper.userData.followMeshRotation = (objectJSON.physics.mass ?? 0) > 0;
+        extraHelper.userData.sceneObjectId = objectJSON.id;
+        extraHelper.userData.colliderIndex = index;
+        extraHelper.userData.localOffset = localOffset;
+        extraHelper.traverse((child) => { child.userData.sceneObjectId = objectJSON.id; child.userData.colliderIndex = index; });
+        extraHelper.visible = showPhysicsBodies;
+        scene.add(extraHelper);
+        entries.push({ object3D: extraHelper, colliderIndex: index });
+      });
+      physicsHelpers.set(objectJSON.id, entries);
     }
   }
 }
@@ -529,28 +533,11 @@ function rebuildAudio() {
       audioHelpers.set(emitter.id, helper);
     }
   } catch (error) {
-    projectStatus.textContent = error.message;
+    editorStatus.textContent = error.message;
   }
 }
 
 sceneManager.activeSceneId = sceneData.id;
-sceneManager.onSceneChanged = (id, nextScene) => {
-  triggerManager.clear();
-  for (const trigger of nextScene.triggers || []) triggerManager.registerTrigger(trigger);
-  cutsceneManager.clear();
-  for (const spline of nextScene.splines || []) cutsceneManager.registerSpline(spline);
-  for (const cutscene of nextScene.cutscenes || []) cutsceneManager.registerCutscene(cutscene);
-  splineEditor.load(nextScene.splines?.[0]?.points || []);
-  rebuildPhysics();
-  rebuildAudio();
-  camera.position.fromArray(nextScene.camera?.position || [3.8, 2.8, 5.5]);
-  controls.target.fromArray(nextScene.camera?.target || [0, 0.6, 0]);
-  controls.update();
-  renderObjectList();
-  selectObject(nextScene.objects[0]?.id || null);
-  renderJSON();
-  projectStatus.textContent = `Active scene: ${id}`;
-};
 
 rebuildPhysics();
 
@@ -568,6 +555,7 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let gizmoMode = 'translate';
 let triggerGizmoEdit = null;
+let colliderGizmoEdit = null;
 
 function setGizmoMode(mode) {
   gizmoMode = mode;
@@ -628,66 +616,7 @@ scriptEditor = monaco.editor.create(scriptEditorHost, {
   language: 'javascript',
   value: '',
 });
-fileEditor = monaco.editor.create(fileEditorHost, {
-  ...editorOptions,
-  language: 'javascript',
-  value: '',
-});
 addFullscreenControl(scriptEditorHost, 'script');
-addFullscreenControl(fileEditorHost, 'project file');
-
-function showSceneWorkspace() {
-  activeProjectFile = null;
-  fileWorkspace.hidden = true;
-  panel.classList.remove('is-file-workspace');
-  requestAnimationFrame(() => monaco.editor.getEditors().forEach((editor) => editor.layout()));
-}
-
-function showFileWorkspace(file) {
-  activeProjectFile = file;
-  fileWorkspaceTitle.textContent = file.path;
-  fileWorkspace.hidden = false;
-  panel.classList.add('is-file-workspace');
-  const isCodeFile = file.type === 'javascript' || file.type === 'shader' || file.type === 'document';
-  fileEditorHost.hidden = !isCodeFile;
-  fileDetailView.hidden = isCodeFile;
-  saveFileWorkspace.hidden = !isCodeFile;
-  if (isCodeFile) {
-    const language = file.type === 'shader' ? 'cpp' : file.path.endsWith('.md') ? 'markdown' : 'javascript';
-    let model = projectFileModels.get(file.path);
-    if (!model) {
-      model = monaco.editor.createModel(file.content || '', language, monaco.Uri.parse(`inmemory://3ditorjs/${file.path}`));
-      projectFileModels.set(file.path, model);
-    } else {
-      model.setValue(file.content || '');
-      monaco.editor.setModelLanguage(model, language);
-    }
-    fileEditor.setModel(model);
-    requestAnimationFrame(() => fileEditor.layout());
-    return;
-  }
-  const category = file.type === 'audio' ? 'Audio asset' : 'Asset';
-  fileDetailView.textContent = `${category}: ${file.path}. Imported media metadata and preview controls will appear here. Source asset files are preserved as project files and are not opened as editable JavaScript.`;
-}
-
-returnToScene.addEventListener('click', showSceneWorkspace);
-saveFileWorkspace.addEventListener('click', async () => {
-  if (!activeProjectFile) return;
-  try {
-    await saveProjectSource(activeProjectFile, fileEditor.getValue());
-  } catch (error) {
-    projectStatus.textContent = error.message;
-  }
-});
-
-async function saveProjectSource(file, content) {
-  file.content = content;
-  const model = projectFileModels.get(file.path);
-  if (model && model.getValue() !== content) model.setValue(content);
-  if (scriptSelect.value === file.path && scriptEditor.getValue() !== content) scriptEditor.setValue(content);
-  if (projectManager.storage && projectManager.projectId) await projectManager.saveProjectFile(file.path, content);
-  projectStatus.textContent = `Saved ${file.path}`;
-}
 
 function populateScripts() {
   const current = scriptSelect.value;
@@ -703,7 +632,7 @@ function populateScripts() {
 }
 
 function listAudioFiles(folder) {
-  return projectManager.listFiles().filter((file) => file.type === 'audio' && file.path.startsWith(`audio/${folder}/`) && !file.path.endsWith('.gitkeep'));
+  return sceneAssets.listAudio(folder);
 }
 
 function populateBgmSelect() {
@@ -734,20 +663,18 @@ function editSelectedScript() {
   scriptEditor.layout();
 }
 
-async function saveSelectedScript() {
+function saveSelectedScript() {
   const file = scriptManager.listScripts().find((entry) => entry.path === scriptSelect.value);
   if (!file) return;
-  try {
-    await saveProjectSource(file, scriptEditor.getValue());
-  } catch (error) {
-    projectStatus.textContent = error.message;
-  }
+  file.content = scriptEditor.getValue();
+  file.exportName = file.content.match(/export class (\w+)/)?.[1] || file.exportName;
+  editorStatus.textContent = `Saved ${file.path}`;
 }
 
 function playSelectedCharacter() {
   const candidate = selectedId ? sceneManager.getMesh(selectedId) : null;
   if (!candidate) {
-    projectStatus.textContent = 'Select a character object first';
+    editorStatus.textContent = 'Select a character object first';
     return;
   }
   playMode = !playMode;
@@ -763,7 +690,7 @@ function playSelectedCharacter() {
   playScene.title = playMode ? 'Stop scene' : 'Play scene';
   transformControls.detach();
   controls.enabled = !playMode;
-  projectStatus.textContent = playMode ? `Playing as ${candidate.name}` : 'Scene editor';
+  editorStatus.textContent = playMode ? `Playing as ${candidate.name}` : 'Scene editor';
   if (!playMode) rebuildPhysics();
 }
 
@@ -858,52 +785,36 @@ function applyCode() {
   }
 }
 
-async function saveProject() {
-  try {
-    await projectManager.connectStorage(projectStorage, 'Untitled Project', activeProjectId);
-    await projectManager.saveProjectFile('scenes/main.scene.json', jsonEditor.getValue());
-    await projectManager.saveAllFiles();
-    projectStatus.textContent = 'Project saved in browser storage';
-  } catch (error) {
-    projectStatus.textContent = error.message;
-  }
-}
-
-async function loadProject() {
-  try {
-    await projectManager.connectStorage(projectStorage, 'Untitled Project', activeProjectId);
-    const content = await projectManager.loadProjectFile('scenes/main.scene.json');
-    if (!content) {
-      projectStatus.textContent = 'No saved scene found';
-      return;
-    }
-    jsonEditor.setValue(content);
-    applyJSON();
-    projectStatus.textContent = 'Project loaded from browser storage';
-    renderProjectTree();
-  } catch (error) {
-    projectStatus.textContent = error.message;
-  }
-}
-
-projectSave.addEventListener('click', saveProject);
-projectLoad.addEventListener('click', loadProject);
 populateScripts();
 populateBgmSelect();
 scriptSelect.addEventListener('change', editSelectedScript);
-createScriptButton.addEventListener('click', () => {
-  const name = window.prompt('Script name', 'player-controller');
+function openNewScriptForm() {
+  newScriptForm.hidden = false;
+  newScriptNameInput.value = '';
+  newScriptNameInput.focus();
+}
+function closeNewScriptForm() {
+  newScriptForm.hidden = true;
+}
+function confirmNewScript() {
+  const name = newScriptNameInput.value.trim();
   if (!name) return;
   try {
     const file = scriptManager.createScript(name);
-    const className = name.replace(/[^a-zA-Z0-9]/g, '') || 'GameScript';
-    file.content = `export class ${className} {\n  constructor({ mesh, physics, camera }) {\n    this.mesh = mesh;\n    this.physics = physics;\n    this.camera = camera;\n  }\n\n  update(input, deltaTime) {\n    // Add game-specific controls here.\n  }\n}\n`;
     populateScripts();
     scriptSelect.value = file.path;
     editSelectedScript();
+    closeNewScriptForm();
   } catch (error) {
-    projectStatus.textContent = error.message;
+    editorStatus.textContent = error.message;
   }
+}
+createScriptButton.addEventListener('click', openNewScriptForm);
+cancelNewScriptButton.addEventListener('click', closeNewScriptForm);
+confirmNewScriptButton.addEventListener('click', confirmNewScript);
+newScriptNameInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') confirmNewScript();
+  if (event.key === 'Escape') closeNewScriptForm();
 });
 editScriptButton.addEventListener('click', editSelectedScript);
 saveScriptButton.addEventListener('click', saveSelectedScript);
@@ -962,6 +873,7 @@ function selectObject(id) {
         const nextValues = values.slice();
         nextValues[index] = Number(input.value) || 0;
         sceneManager.updateObjectTransform(id, { [axis]: nextValues });
+        if (axis === 'scale') rebuildPhysics();
         selectObject(id);
         renderJSON();
       });
@@ -993,8 +905,8 @@ function selectObject(id) {
       title: 'Physics',
       fields: [
         { label: 'Enabled', type: 'checkbox', key: 'enabled', value: physics.enabled ?? false },
-        { label: 'Mass', type: 'number', key: 'mass', value: physics.mass ?? 0, step: '0.1', min: '0' },
-        { label: 'Collider', type: 'select', key: 'collider', value: physics.collider || 'box', options: ['box', 'sphere', 'cylinder', 'capsule'] },
+        { label: 'Mass', type: 'number', key: 'mass', value: physics.mass ?? 1, step: '0.1', min: '0' },
+        { label: 'Collider', type: 'select', key: 'collider', value: physics.collider || 'auto', options: ['auto', 'box', 'sphere', 'cylinder', 'capsule'] },
         { label: 'Radius', type: 'number', key: 'radius', value: physics.radius ?? 0.5, step: '0.1', min: '0.01' },
         { label: 'Height', type: 'number', key: 'height', value: physics.height ?? 1, step: '0.1', min: '0.01' },
         { label: 'Linear damping', type: 'number', key: 'linearDamping', value: physics.linearDamping ?? 0.01, step: '0.01', min: '0', max: '1' },
@@ -1030,6 +942,7 @@ function selectObject(id) {
       input.addEventListener(eventName, () => {
         const value = field.type === 'checkbox' ? input.checked : field.type === 'number' ? Number(input.value) : input.value;
         const physicsValues = { [field.key]: value };
+        if (field.key === 'enabled' && value && !physics.mass) physicsValues.mass = 1;
         if (field.key === 'velocityX' || field.key === 'velocityY' || field.key === 'velocityZ') {
           physicsValues.velocity = [physics.velocity?.[0] || 0, physics.velocity?.[1] || 0, physics.velocity?.[2] || 0];
           physicsValues.velocity[field.key.slice(-1).charCodeAt(0) - 88] = value;
@@ -1038,7 +951,7 @@ function selectObject(id) {
         sceneManager.updateObjectProperties(id, properties);
         if (group.title === 'Physics') rebuildPhysics();
         if (group.title === 'Material' && field.key === 'type' && (value === 'ShaderMaterial' || value === 'RawShaderMaterial')) {
-          const shaderFiles = projectManager.createShaderFiles(`${objectJSON.name || id}-material`);
+          const shaderFiles = sceneAssets.createShaderFiles(`${objectJSON.name || id}-material`);
           sceneManager.updateObjectProperties(id, { material: { shaderFiles } });
         }
         renderJSON();
@@ -1092,9 +1005,9 @@ function openShaderEditor(id, shaderControls) {
   const objectJSON = sceneManager.exportJSON().objects.find((entry) => entry.id === id);
   if (!objectJSON) return;
   const material = objectJSON.material || {};
-  const shaderFiles = material.shaderFiles || projectManager.createShaderFiles(`${objectJSON.name || objectJSON.id}-material`);
-  const vertexFile = projectManager.files.get(shaderFiles.vertexPath);
-  const fragmentFile = projectManager.files.get(shaderFiles.fragmentPath);
+  const shaderFiles = material.shaderFiles || sceneAssets.createShaderFiles(`${objectJSON.name || objectJSON.id}-material`);
+  const vertexFile = sceneAssets.get(shaderFiles.vertexPath);
+  const fragmentFile = sceneAssets.get(shaderFiles.fragmentPath);
   const vertexShader = vertexFile?.content || material.vertexShader || 'void main() {\n  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);\n}';
   const fragmentShader = fragmentFile?.content || material.fragmentShader || 'void main() {\n  gl_FragColor = vec4(0.2, 0.6, 1.0, 1.0);\n}';
   if (vertexFile) vertexFile.content = vertexShader;
@@ -1117,10 +1030,10 @@ function addShaderEditor(parent, labelText, key, path, value) {
   const host = document.createElement('div');
   host.className = 'shader-editor-host';
   parent.append(heading, host);
-  let model = projectFileModels.get(path);
+  let model = shaderFileModels.get(path);
   if (!model) {
     model = monaco.editor.createModel(value, 'cpp', monaco.Uri.parse(`inmemory://3ditorjs/${path}`));
-    projectFileModels.set(path, model);
+    shaderFileModels.set(path, model);
   } else {
     model.setValue(value);
     monaco.editor.setModelLanguage(model, 'cpp');
@@ -1130,7 +1043,7 @@ function addShaderEditor(parent, labelText, key, path, value) {
   editor.onDidChangeModelContent(() => {
     if (!selectedId) return;
     const source = editor.getValue();
-    const file = projectManager.files.get(path);
+    const file = sceneAssets.get(path);
     if (file) file.content = source;
     sceneManager.updateObjectProperties(selectedId, { material: { [key]: source } });
     const mesh = sceneManager.getMesh(selectedId);
@@ -1413,6 +1326,28 @@ function updateVectorFields(parent, labelText, values) {
   });
 }
 
+function addColliderTransformFields(labelText, gizmoModeName, values, onInput) {
+  const row = document.createElement('div');
+  row.className = 'transform-row';
+  row.dataset.vectorField = labelText;
+  const label = document.createElement('button');
+  label.type = 'button';
+  label.dataset.gizmoMode = gizmoModeName;
+  label.setAttribute('aria-pressed', String(gizmoMode === gizmoModeName));
+  label.textContent = labelText;
+  label.addEventListener('click', () => setGizmoMode(gizmoModeName));
+  row.append(label);
+  values.forEach((value) => {
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '0.1';
+    input.value = value.toFixed(2);
+    input.addEventListener('change', () => onInput([...row.querySelectorAll('input')].map((entry) => Number(entry.value) || 0)));
+    row.append(input);
+  });
+  transformFields.append(row);
+}
+
 function selectSpline(id) {
   const spline = sceneManager.exportJSON().splines?.find((entry) => entry.id === id);
   if (!spline) return;
@@ -1610,6 +1545,189 @@ function updateTriggerArea(id, settings) {
   renderJSON();
 }
 
+function updateColliderSpec(id, colliderIndex, patch) {
+  if (colliderIndex === null) {
+    sceneManager.updateObjectProperties(id, { physics: patch });
+  } else {
+    const objectJSON = sceneManager.exportJSON().objects.find((entry) => entry.id === id);
+    const extras = [...(objectJSON.physics.extraColliders || [])];
+    extras[colliderIndex] = { ...extras[colliderIndex], ...patch };
+    sceneManager.updateObjectProperties(id, { physics: { extraColliders: extras } });
+  }
+  rebuildPhysics();
+  if (activeSelection?.type === 'collider' && activeSelection.id === id && activeSelection.colliderIndex === colliderIndex) selectCollider(id, colliderIndex);
+  renderJSON();
+}
+
+function addExtraCollider(id) {
+  const objectJSON = sceneManager.exportJSON().objects.find((entry) => entry.id === id);
+  if (!objectJSON?.physics?.enabled) return;
+  const extras = [...(objectJSON.physics.extraColliders || []), { collider: 'box', size: [0.5, 0.5, 0.5], position: [0, 0, 0] }];
+  sceneManager.updateObjectProperties(id, { physics: { extraColliders: extras } });
+  rebuildPhysics();
+  selectCollider(id, extras.length - 1);
+  renderJSON();
+}
+
+function removeExtraCollider(id, colliderIndex) {
+  const objectJSON = sceneManager.exportJSON().objects.find((entry) => entry.id === id);
+  const extras = (objectJSON.physics.extraColliders || []).filter((_, index) => index !== colliderIndex);
+  sceneManager.updateObjectProperties(id, { physics: { extraColliders: extras } });
+  rebuildPhysics();
+  selectCollider(id, null);
+  renderJSON();
+}
+
+function selectCollider(id, colliderIndex = null) {
+  const objectJSON = sceneManager.exportJSON().objects.find((entry) => entry.id === id);
+  const mesh = sceneManager.getMesh(id);
+  const helper = getColliderHelper(id, colliderIndex);
+  if (!objectJSON || !mesh || !helper) return;
+  selectedId = null;
+  activeSelection = { type: 'collider', id, colliderIndex };
+  sceneDeleteObject.disabled = true;
+  sceneDuplicateObject.disabled = true;
+  transformControls.detach();
+  splineEditor.detachGizmo();
+  transformControls.attach(helper);
+  selectionLabel.contentEditable = 'false';
+  selectionLabel.textContent = `${objectJSON.name || id} \u2013 ${colliderIndex === null ? 'primary collider' : `collider ${colliderIndex + 2}`}`;
+  transformFields.replaceChildren();
+  propertyFields.replaceChildren();
+  scenePropertyFields.replaceChildren();
+  animationPropertyFields.replaceChildren();
+  scriptAttachmentFields.replaceChildren();
+  if (gizmoMode !== 'translate' && gizmoMode !== 'scale') setGizmoMode('translate');
+
+  const spec = getColliderSpec(objectJSON, colliderIndex);
+  const resolvedPhysics = colliderIndex === null ? resolveColliderOptions(objectJSON, mesh, spec) : spec;
+  const effective = computeEffectiveColliderDims(mesh, resolvedPhysics);
+  addColliderTransformFields('Position', 'translate', helper.position.toArray(), (position) => {
+    helper.position.fromArray(position);
+    if (colliderIndex === null) {
+      updateColliderSpec(id, null, { position });
+    } else {
+      const scale = mesh.scale.toArray();
+      const localOffset = position.map((value, index) => (value - mesh.position.toArray()[index]) / (scale[index] || 1));
+      updateColliderSpec(id, colliderIndex, { position: localOffset });
+    }
+  });
+  if (resolvedPhysics.collider === 'box') {
+    addColliderTransformFields('Size', 'scale', effective.size, (size) => {
+      const base = baseColliderDimsFromEffective(mesh, 'box', { size });
+      updateColliderSpec(id, colliderIndex, { collider: 'box', size: base.size });
+    });
+  } else if (resolvedPhysics.collider === 'sphere') {
+    addColliderTransformFields('Radius', 'scale', [effective.radius], ([radius]) => {
+      const base = baseColliderDimsFromEffective(mesh, 'sphere', { radius });
+      updateColliderSpec(id, colliderIndex, { collider: 'sphere', radius: base.radius });
+    });
+  } else {
+    addColliderTransformFields('Radius / height', 'scale', [effective.radius, effective.height], ([radius, height]) => {
+      const base = baseColliderDimsFromEffective(mesh, resolvedPhysics.collider, { radius, height });
+      updateColliderSpec(id, colliderIndex, { collider: resolvedPhysics.collider, ...base });
+    });
+  }
+  setGizmoMode(gizmoMode);
+
+  const listHeading = document.createElement('p');
+  listHeading.className = 'property-heading';
+  listHeading.textContent = 'Colliders on this object';
+  propertyFields.append(listHeading);
+  const list = document.createElement('div');
+  list.className = 'collider-list';
+  const primaryButton = document.createElement('button');
+  primaryButton.type = 'button';
+  primaryButton.className = 'attached-script';
+  primaryButton.textContent = 'Primary collider';
+  primaryButton.classList.toggle('is-active', colliderIndex === null);
+  primaryButton.addEventListener('click', () => selectCollider(id, null));
+  list.append(primaryButton);
+  (objectJSON.physics.extraColliders || []).forEach((_, index) => {
+    const extraButton = document.createElement('button');
+    extraButton.type = 'button';
+    extraButton.className = 'attached-script';
+    extraButton.textContent = `Collider ${index + 2}`;
+    extraButton.classList.toggle('is-active', colliderIndex === index);
+    extraButton.addEventListener('click', () => selectCollider(id, index));
+    list.append(extraButton);
+  });
+  propertyFields.append(list);
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'attached-script';
+  addButton.textContent = '+ Add collider';
+  addButton.addEventListener('click', () => addExtraCollider(id));
+  propertyFields.append(addButton);
+  if (colliderIndex !== null) {
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'attached-script';
+    removeButton.textContent = 'Remove this collider';
+    removeButton.addEventListener('click', () => removeExtraCollider(id, colliderIndex));
+    propertyFields.append(removeButton);
+  }
+
+  const heading = document.createElement('p');
+  heading.className = 'property-heading';
+  heading.textContent = 'Physics collider';
+  propertyFields.append(heading);
+  addSelectField(
+    propertyFields,
+    'Collider shape',
+    spec.collider || 'auto',
+    (colliderIndex === null ? ['auto', 'box', 'sphere', 'cylinder', 'capsule'] : ['box', 'sphere', 'cylinder', 'capsule']).map((value) => ({ value, label: value })),
+    (collider) => updateColliderSpec(id, colliderIndex, { collider }),
+  );
+  const backButton = document.createElement('button');
+  backButton.type = 'button';
+  backButton.className = 'attached-script';
+  backButton.textContent = 'Select mesh instead';
+  backButton.addEventListener('click', () => selectObject(id));
+  propertyFields.append(backButton);
+}
+
+const colliderContextMenu = document.createElement('div');
+colliderContextMenu.className = 'collider-context-menu';
+colliderContextMenu.hidden = true;
+document.body.append(colliderContextMenu);
+
+function hideColliderContextMenu() {
+  colliderContextMenu.hidden = true;
+}
+
+function showColliderContextMenu(x, y, id, colliderIndex) {
+  colliderContextMenu.replaceChildren();
+  colliderContextMenu.style.left = `${x}px`;
+  colliderContextMenu.style.top = `${y}px`;
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.textContent = 'Add collider';
+  addButton.addEventListener('click', () => {
+    addExtraCollider(id);
+    hideColliderContextMenu();
+  });
+  colliderContextMenu.append(addButton);
+  if (colliderIndex !== null) {
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.textContent = 'Remove this collider';
+    removeButton.addEventListener('click', () => {
+      removeExtraCollider(id, colliderIndex);
+      hideColliderContextMenu();
+    });
+    colliderContextMenu.append(removeButton);
+  }
+  colliderContextMenu.hidden = false;
+}
+
+window.addEventListener('pointerdown', (event) => {
+  if (!colliderContextMenu.hidden && !colliderContextMenu.contains(event.target)) hideColliderContextMenu();
+});
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') hideColliderContextMenu();
+});
+
 function selectTrigger(id) {
   const trigger = sceneManager.exportJSON().triggers?.find((entry) => entry.id === id);
   if (!trigger) return;
@@ -1641,7 +1759,7 @@ function selectTrigger(id) {
   const actionLabel = document.createElement('span');
   actionLabel.textContent = 'On enter';
   const actionSelect = document.createElement('select');
-  for (const [value, label] of [['', 'No action'], ['switchScene', 'Switch scene'], ['playCutscene', 'Play cutscene'], ['playSfx', 'Play sound effect']]) {
+  for (const [value, label] of [['', 'No action'], ['playCutscene', 'Play cutscene'], ['playSfx', 'Play sound effect']]) {
     const option = document.createElement('option');
     option.value = value;
     option.textContent = label;
@@ -1654,10 +1772,6 @@ function selectTrigger(id) {
   });
   actionRow.append(actionLabel, actionSelect);
   propertyFields.append(actionRow);
-  if (trigger.action === 'switchScene') {
-    const scenes = [...sceneManager.scenes.entries()].map(([sceneId, sceneJSON]) => ({ value: sceneId, label: sceneJSON.metadata?.name || sceneId }));
-    addSelectField(propertyFields, 'Scene', trigger.params?.sceneId, scenes, (sceneId) => updateTriggerArea(id, { params: { sceneId } }));
-  }
   if (trigger.action === 'playCutscene') {
     const cutscenes = (sceneManager.exportJSON().cutscenes || []).map((cutscene) => ({ value: cutscene.id, label: cutscene.name || cutscene.id }));
     addSelectField(propertyFields, 'Cutscene', trigger.params?.cutsceneId, cutscenes, (cutsceneId) => updateTriggerArea(id, { params: { cutsceneId } }));
@@ -1844,7 +1958,7 @@ function addSceneObject(type) {
   if (type === 'audio-emitter') {
     const sound = listAudioFiles('sfx')[0];
     if (!sound) {
-      objectModalStatus.textContent = 'Import a sound effect in audio/sfx before adding an emitter.';
+      objectModalStatus.textContent = 'Upload a sound effect in audio/sfx before adding an emitter.';
       return;
     }
     const emitter = { id: `audio_${Date.now()}`, name: 'Audio Emitter', path: sound.path, position: [0, 1, 0], volume: 0.8, radius: 12, loop: true, autoplay: true };
@@ -1935,7 +2049,7 @@ function addSceneObject(type) {
       rotation: [0, 0, 0],
       scale: [1, 1, 1],
       material: { color: '#ffffff', roughness: 0.5, metalness: 0 },
-      physics: { enabled: false, mass: 0, collider: 'box', size },
+      physics: { enabled: false, mass: 0, collider: 'auto', size },
     };
     sceneManager.addObject(objectJSON);
     selectObject(objectJSON.id);
@@ -1959,7 +2073,7 @@ importObjectFile.addEventListener('change', async () => {
   const file = importObjectFile.files[0];
   if (!file) return;
   if (file.name.toLowerCase().endsWith('.gltf')) {
-    objectModalStatus.textContent = 'GLTF import requires a local asset URL; use GLB or an external file for the next asset slice.';
+    objectModalStatus.textContent = 'GLTF upload requires a local asset URL; use GLB or an external file for the next asset slice.';
     return;
   }
   const url = URL.createObjectURL(file);
@@ -1969,13 +2083,13 @@ importObjectFile.addEventListener('change', async () => {
     gltf.scene.name = name;
     gltf.scene.userData.sceneObjectId = id;
     scene.add(gltf.scene);
-    sceneManager.sceneJSON.objects.push({ id, name, type: 'gltf', position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], material: { color: '#ffffff', roughness: 0.5, metalness: 0 }, physics: { enabled: false, mass: 0, collider: 'box', size: [1, 1, 1] } });
+    sceneManager.sceneJSON.objects.push({ id, name, type: 'gltf', position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1], material: { color: '#ffffff', roughness: 0.5, metalness: 0 }, physics: { enabled: false, mass: 0, collider: 'auto', size: [1, 1, 1] } });
     sceneManager.objectMeshes.set(id, gltf.scene);
     renderObjectList();
     renderJSON();
     hideObjectModal();
     URL.revokeObjectURL(url);
-  }, undefined, (error) => { objectModalStatus.textContent = `Import failed: ${error.message}`; URL.revokeObjectURL(url); });
+  }, undefined, (error) => { objectModalStatus.textContent = `Upload failed: ${error.message}`; URL.revokeObjectURL(url); });
 });
 
 let pointerDownPosition = null;
@@ -1997,10 +2111,39 @@ renderer.domElement.addEventListener('pointerup', (event) => {
   pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
   pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
+  if (showPhysicsBodies) {
+    const colliderObjects = [...physicsHelpers.values()].flatMap((entries) => entries.map((entry) => entry.object3D));
+    const hit = raycaster.intersectObjects(colliderObjects, true)[0];
+    if (hit) selectCollider(hit.object.userData.sceneObjectId, hit.object.userData.colliderIndex ?? null);
+    return;
+  }
   const selectableMeshes = [...sceneManager.objectMeshes.values()]
     .filter((mesh) => mesh.userData.sceneObject?.type !== 'plane');
   const hit = raycaster.intersectObjects(selectableMeshes)[0];
   if (hit) selectObject(hit.object.userData.sceneObjectId);
+});
+
+renderer.domElement.addEventListener('contextmenu', (event) => {
+  if (!showPhysicsBodies) return;
+  event.preventDefault();
+  const bounds = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+  pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const colliderObjects = [...physicsHelpers.values()].flatMap((entries) => entries.map((entry) => entry.object3D));
+  const colliderHit = raycaster.intersectObjects(colliderObjects, true)[0];
+  if (colliderHit) {
+    showColliderContextMenu(event.clientX, event.clientY, colliderHit.object.userData.sceneObjectId, colliderHit.object.userData.colliderIndex ?? null);
+    return;
+  }
+  const selectableMeshes = [...sceneManager.objectMeshes.values()]
+    .filter((mesh) => mesh.userData.sceneObject?.type !== 'plane');
+  const meshHit = raycaster.intersectObjects(selectableMeshes)[0];
+  if (meshHit) {
+    const hitId = meshHit.object.userData.sceneObjectId;
+    const hitObjectJSON = sceneManager.exportJSON().objects.find((entry) => entry.id === hitId);
+    if (hitObjectJSON?.physics?.enabled) showColliderContextMenu(event.clientX, event.clientY, hitId, null);
+  }
 });
 
 codeEditor.onDidChangeModelContent(() => {
@@ -2015,7 +2158,9 @@ applyCodeButton.addEventListener('click', applyCode);
 
 physicsToggle.addEventListener('change', () => {
   showPhysicsBodies = physicsToggle.checked;
-  for (const helper of physicsHelpers.values()) helper.visible = showPhysicsBodies;
+  for (const entries of physicsHelpers.values()) {
+    for (const { object3D } of entries) object3D.visible = showPhysicsBodies;
+  }
 });
 
 triggerToggle.addEventListener('change', () => {
@@ -2092,32 +2237,6 @@ panelResizeHandle.addEventListener('pointerup', (event) => {
   panel.classList.remove('is-resizing');
 });
 
-projectCollapse.addEventListener('click', () => {
-  projectPanel.classList.toggle('is-collapsed');
-  const collapsed = projectPanel.classList.contains('is-collapsed');
-  projectCollapse.textContent = collapsed ? '›' : '‹';
-  projectCollapse.setAttribute('aria-label', collapsed ? 'Expand project explorer' : 'Collapse project explorer');
-  projectCollapse.setAttribute('title', collapsed ? 'Expand project explorer' : 'Collapse project explorer');
-});
-
-projectResizeHandle.addEventListener('pointerdown', (event) => {
-  event.preventDefault();
-  projectResizeHandle.setPointerCapture(event.pointerId);
-  projectPanel.classList.add('is-resizing');
-});
-
-projectResizeHandle.addEventListener('pointermove', (event) => {
-  if (!projectResizeHandle.hasPointerCapture(event.pointerId)) return;
-  const maxWidth = window.innerWidth * 0.5;
-  const nextWidth = Math.min(maxWidth, Math.max(190, event.clientX));
-  projectPanel.style.width = `${nextWidth}px`;
-});
-
-projectResizeHandle.addEventListener('pointerup', (event) => {
-  projectResizeHandle.releasePointerCapture(event.pointerId);
-  projectPanel.classList.remove('is-resizing');
-});
-
 inspectorCollapse.addEventListener('click', () => {
   panel.classList.toggle('is-collapsed');
   const collapsed = panel.classList.contains('is-collapsed');
@@ -2157,11 +2276,22 @@ function animate() {
     .filter((mesh) => (mesh.userData.sceneObject?.physics?.mass || 0) > 0);
   triggerManager.update(dynamicActors);
   audioManager.updateEmitterActors(playTarget ? [playTarget] : dynamicActors.slice(0, 1));
-  for (const [id, helper] of physicsHelpers) {
+  for (const [id, entries] of physicsHelpers) {
     const mesh = sceneManager.getMesh(id);
-    if (mesh) {
-      helper.position.copy(mesh.position);
-      if (helper.userData.followMeshRotation) helper.quaternion.copy(mesh.quaternion);
+    if (!mesh) continue;
+    for (const { object3D, colliderIndex } of entries) {
+      if (colliderIndex === null) {
+        object3D.position.copy(mesh.position);
+      } else if (object3D.userData.localOffset) {
+        const scale = mesh.scale.toArray();
+        const offset = object3D.userData.localOffset;
+        object3D.position.set(
+          mesh.position.x + offset[0] * scale[0],
+          mesh.position.y + offset[1] * scale[1],
+          mesh.position.z + offset[2] * scale[2],
+        );
+      }
+      if (object3D.userData.followMeshRotation) object3D.quaternion.copy(mesh.quaternion);
     }
   }
   controls.update();
@@ -2173,22 +2303,3 @@ selectObject(null);
 renderJSON();
 resizeRenderer();
 animate();
-
-async function openRequestedProject() {
-  if (!activeProjectId) return;
-  try {
-    const project = await projectManager.connectStorage(projectStorage, 'Untitled Project', activeProjectId);
-    const content = await projectManager.loadProjectFile('scenes/main.scene.json');
-    if (content) {
-      jsonEditor.setValue(content);
-      applyJSON();
-    }
-    populateScripts();
-    renderProjectTree();
-    projectStatus.textContent = `Opened ${project.name}`;
-  } catch (error) {
-    projectStatus.textContent = error.message;
-  }
-}
-
-openRequestedProject();
