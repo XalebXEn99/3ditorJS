@@ -25,7 +25,7 @@ export function createDefaultScene() {
         rotation: [-Math.PI / 2, 0, 0],
         scale: [1, 1, 1],
         material: { color: '#26343b', roughness: 0.8, metalness: 0 },
-        physics: { enabled: true, mass: 0, collider: 'box', size: [30, 0.2, 30], rotation: [0, 0, 0] },
+        physics: { enabled: true, mass: 0, collider: 'box', size: [30, 0.2, 30], position: [0, -0.1, 0], rotation: [0, 0, 0] },
       },
     ],
     splines: [],

@@ -495,7 +495,7 @@ function rebuildPhysics() {
           new THREE.LineBasicMaterial({ color: 0x91c483 }),
         );
       }
-      helper.position.copy(mesh.position);
+      helper.position.fromArray(objectJSON.physics.position || mesh.position.toArray());
       helper.rotation.set(...(objectJSON.physics.rotation || mesh.rotation.toArray()));
       helper.userData.followMeshRotation = (objectJSON.physics.mass ?? 0) > 0;
       helper.visible = showPhysicsBodies;
@@ -1926,7 +1926,7 @@ function addSceneObject(type) {
     renderObjectList();
     selectCutscene(cutscene.id);
   } else {
-    const size = type === 'sphere' ? [1.4, 1.4, 1.4] : type === 'cylinder' || type === 'cone' ? [1, 1.4, 1] : type === 'torus' ? [1.8, 0.5, 1.8] : [1.5, 1.5, 1.5];
+    const size = type === 'sphere' ? [1.4, 1.4, 1.4] : type === 'cylinder' || type === 'cone' ? [1, 1.4, 1] : type === 'torus' ? [1.8, 0.5, 1.8] : [1, 1, 1];
     const objectJSON = {
       id: `${type}_${Date.now()}`,
       name: nextName(type),

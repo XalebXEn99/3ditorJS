@@ -134,7 +134,7 @@ export function generateSceneCode(sceneJSON) {
       } else {
         lines.push(`  ${variableName}Body.addShape(${shape});`);
       }
-      lines.push(`  ${variableName}Body.position.set(${objectJSON.position?.join(', ') || '0, 0, 0'});`);
+      lines.push(`  ${variableName}Body.position.set(${physics.position?.join(', ') || objectJSON.position?.join(', ') || '0, 0, 0'});`);
       if (physics.velocity) lines.push(`  ${variableName}Body.velocity.set(${physics.velocity.join(', ')});`);
       lines.push(`  physicsWorld.addBody(${variableName}Body);`);
     }

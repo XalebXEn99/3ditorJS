@@ -30,7 +30,7 @@ export class CannonAdapter {
   addRigidBody(mesh, options = {}) {
     const body = new CANNON.Body({
       mass: options.mass ?? 0,
-      position: new CANNON.Vec3(...mesh.position.toArray()),
+      position: new CANNON.Vec3(...(options.position || mesh.position.toArray())),
       material: new CANNON.Material(options.material || 'default'),
       linearDamping: options.linearDamping ?? 0.01,
       angularDamping: options.angularDamping ?? 0.01,
