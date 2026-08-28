@@ -16,7 +16,20 @@ npm run dev
 
 Open the local URL printed by Vite. The editor starts with an empty Main Scene, neutral lighting, an editor camera, and a grid.
 
-The editor supports scene JSON, generated Three.js scene code, Cannon-es physics with an editable/compound collider system, trigger zones, spline cutscenes, audio (BGM and SFX), Monaco JavaScript/GLSL editors, material and shader authoring, scene cameras, script attachments, and scene-tree editing.
+## Features
+
+- **Scene Tree**: add boxes, spheres, cylinders, cones, toruses, lights, cameras, cutscene/spline pairs, box/sphere trigger areas, audio emitters, or upload a GLTF/GLB model; duplicate, delete, and select any of them.
+- **Transform gizmo**: translate/rotate/scale any selected item, synced live with Scene JSON and generated `scene.js`.
+- **Materials and shaders**: every built-in Three.js material, plus a Monaco GLSL editor for `ShaderMaterial`/`RawShaderMaterial`.
+- **Physics**: Cannon-es bodies with an `auto` collider mode that matches the real mesh geometry and rescales with the object automatically, or manual box/sphere/cylinder/capsule shapes. With "Physics colliders" display on, colliders are directly selectable and gizmo-editable (independent translate/resize), and right-click lets you add or remove extra colliders to build compound shapes.
+- **Triggers**: box/sphere trigger volumes that fire "Play cutscene" or "Play sound effect" actions.
+- **Cutscenes and splines**: Catmull-Rom camera paths with play/pause/stop controls.
+- **Scripts**: create/edit JavaScript classes in-browser and attach them to any object; they're emitted as real imports/instances in `scene.js`.
+- **Audio**: upload BGM/SFX, configure background music, and preview playback.
+- **Code/JSON sync**: `scene.js` and Scene JSON tabs stay in sync with the visual editor; edit either and apply it back.
+- **Undo/redo** and a resizable/collapsible inspector panel.
+
+See [docs/CONTROLS.md](docs/CONTROLS.md) for the complete control-by-control reference.
 
 ## Exporting a scene
 
@@ -51,7 +64,7 @@ The app is a static browser build deployed through GitHub Actions to GitHub Page
 
 `scene.js` is the primary authoring document. The visual editor and inspector are convenience tools for editor-managed scene constructs, while Scene JSON is the structured persistence and inspection projection.
 
-`scene.js`, the visual editor, and the inspector are synchronized authoring paths. Press `Apply scene.js` to commit code edits into the active scene; inspector and transform-gizmo edits update the canonical scene and regenerate the supported scene code. The reverse parser currently guarantees round trips for the generated supported constructs: cameras, lights, meshes, materials, transforms, physics bodies, triggers, splines, and cutscenes. Custom runtime JavaScript remains authored code and should be kept in the scene module or separate script modules rather than being converted into static scene JSON.
+`scene.js`, the visual editor, and the inspector are synchronized authoring paths. Press `Apply scene.js` to commit code edits into the active scene; inspector and transform-gizmo edits update the canonical scene and regenerate the supported scene code. The reverse parser guarantees round trips for the generated supported constructs: cameras, lights, meshes, materials, transforms, a primary physics body per object, triggers, splines, and cutscenes. Compound "extra" colliders currently round-trip only through the Scene JSON tab, not the `scene.js` code parser. Custom runtime JavaScript remains authored code and should be kept in the scene module or separate script modules rather than being converted into static scene JSON.
 
 ## Verify a production build
 
